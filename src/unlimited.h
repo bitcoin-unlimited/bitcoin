@@ -14,8 +14,10 @@
 #include "consensus/validation.h"
 #include "consensus/params.h"
 #include "requestManager.h"
+#include "checkqueue.h"
 #include <univalue.h>
 #include <vector>
+#include <boost/thread.hpp>
 
 enum {
     DEFAULT_MAX_GENERATED_BLOCK_SIZE = 1000000,
@@ -165,6 +167,7 @@ extern bool fIsChainNearlySyncd;
 extern void BuildSeededBloomFilter(CBloomFilter& memPoolFilter, std::vector<uint256>& vOrphanHashes, uint256 hash);
 extern void LoadFilter(CNode *pfrom, CBloomFilter *filter);
 extern void HandleBlockMessage(CNode *pfrom, const std::string &strCommand, CBlock &block, const CInv &inv);
+extern void HandleBlockMessageThread(CNode *pfrom, const std::string &strCommand, CBlock &block, const CInv &inv, bool fSem);
 extern void ConnectToThinBlockNodes();
 extern void CheckNodeSupportForThinBlocks();
 extern void SendXThinBlock(CBlock &block, CNode* pfrom, const CInv &inv);
@@ -199,6 +202,20 @@ void UpdateRecvStats(CNode* pfrom, const std::string& strCommand, int msgSize, i
 extern CStatHistory<unsigned int, MinValMax<unsigned int> > txAdded;
 extern CStatHistory<uint64_t, MinValMax<uint64_t> > poolSize;
 
+/**  Parallel Block Validation - begin **/
+
+// handling and tracking block validation threads
+struct CHandleBlockMsgThreads {
+    boost::thread* tRef;
+    uint256 hash;
+    uint256 hashPrevBlock;
+    int64_t nStartTime;
+    uint64_t nBlockSize;
+};
+extern std::map<boost::thread::id, CHandleBlockMsgThreads> mapBlockValidationThreads GUARDED_BY(cs_threadblockvalidation);
+extern CCriticalSection cs_blockvalidationthread;
+
+/** Parallel Block Validation - end **/
 
 // Protocol changes:
 

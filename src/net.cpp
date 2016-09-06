@@ -724,7 +724,7 @@ bool CNode::ReceiveMsgBytes(const char* pch, unsigned int nBytes)
                     vRecvMsg.pop_back();
                     LogPrint("thin", "Receive Queue: pushed %s to the front of the queue\n", strCommand);
                 }
-            }
+           }
             // BU: end
             msg.nTime = GetTimeMicros();
             messageHandlerCondition.notify_one();

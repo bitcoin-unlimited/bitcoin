@@ -79,6 +79,7 @@ CSemaphore*  semOutboundAddNode = NULL; // BU: separate semaphore for -addnodes
 CNodeSignals g_signals __attribute__((init_priority(109)));
 CNetCleanup cnet_instance_cleanup __attribute__((init_priority(110)));  // Must construct after statistics, because CNodes use statistics.  In particular, seg fault on osx during exit because constructor/destructor order is not guaranteed between modules in clang.
 
+<<<<<<< HEAD
 std::string ExcessiveBlockValidator(const unsigned int& value,unsigned int* item,bool validate)
 {
   if (validate)
@@ -143,6 +144,9 @@ std::string SubverValidator(const std::string& value,std::string* item,bool vali
 }
 
 CTweakRef<std::string> subverOverrideTweak("net.subversionOveride","If set, this field will override the normal subversion field.  This is useful if you need to hide your node.",&subverOverride,&SubverValidator);
+
+static CSemaphore *semIBD;       // semaphore for IBD threads
+static CSemaphore *semNewBlocks; // semaphore for parallel validation threads
 
 CStatHistory<unsigned int, MinValMax<unsigned int> > txAdded; //"memPool/txAdded");
 CStatHistory<uint64_t, MinValMax<uint64_t> > poolSize; // "memPool/size",STAT_OP_AVE);
@@ -1412,8 +1416,96 @@ void LoadFilter(CNode *pfrom, CBloomFilter *filter)
     CThinBlockStats::UpdateInBoundBloomFilter(nSizeFilter);
 }
 
+//  HandleBlockMessage launches a HandleBlockMessageThread.  And HandleBlockMessageThread processes each block and updates 
+//  the UTXO if the block has been accepted and the tip updated. We cleanup and release the semaphore after the thread has finished.
 void HandleBlockMessage(CNode *pfrom, const string &strCommand, CBlock &block, const CInv &inv)
 {
+    uint64_t nBlockSize = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
+
+    // Initialize Semaphores used to limit the total number of concurrent validation threads.
+    if (semIBD == NULL)
+        semIBD = new CSemaphore(128);
+    if (semNewBlocks == NULL)
+        semNewBlocks = new CSemaphore(4); // this must be equal to the number of scriptcheck queues (currently at 4)
+  
+    // NOTE: You must not have a cs_main lock before you aquire the semaphore grant or you can end up deadlocking
+    //AssertLockNotHeld(cs_main); TODO: need to create this
+
+    // Aquire semaphore grant
+    bool fSemNewBlocks;
+    if (IsChainNearlySyncd()) {
+        if (!semNewBlocks->try_wait()) {
+
+            /** The following functionality is for the case when ALL thread queues and grants are in use, meaning somehow an attacker
+             *  has been able to craft blocks or sustain an attack in such a way as to use up every availabe thread queue.
+             *  When/If that should occur, we must assume we are under a sustained attack and we will have to make a determination
+             *  as to which of the currently running threads we should terminate based on the following critera:
+             *     1) If all queues are in use and another block arrives, then terminate the running thread validating the largest block
+             */
+
+            {
+                LOCK(cs_blockvalidationthread);
+                if (mapBlockValidationThreads.size() > 1)
+                {
+                    uint64_t nLargestBlockSize = 0;
+                    map<boost::thread::id, CHandleBlockMsgThreads>::iterator miLargestBlock;
+                    map<boost::thread::id, CHandleBlockMsgThreads>::iterator iter = mapBlockValidationThreads.begin();
+                    while (iter != mapBlockValidationThreads.end())
+                    {
+                        // Find largest block where the previous block hash matches. Meaning this is a new block and it's a competitor to to your block.
+                        map<boost::thread::id, CHandleBlockMsgThreads>::iterator mi = iter++;
+                        if ((*mi).second.hashPrevBlock == block.GetBlockHeader().hashPrevBlock) {
+                            if ((*mi).second.nBlockSize > nLargestBlockSize) {
+                                nLargestBlockSize = (*mi).second.nBlockSize;
+                                miLargestBlock = mi;
+                            }
+                        }
+                    }
+
+                    // if your block is the biggest or of equal size to the biggest then reject it.
+                    if (nLargestBlockSize <= nBlockSize) {
+                        LogPrint("parallel", "Block rejected - Too many blocks currently being validated: %s\n", block.GetHash().ToString());
+                        return; // block is rejected
+                    }
+                    else { // interrupt chosen thread
+                       mapBlockValidationThreads.erase((*miLargestBlock).first);
+                       (*miLargestBlock).second.tRef->interrupt(); // kill the thread
+                       LogPrint("parallel", "Too many blocks being validated, killing a thread with blockhash %s and previous blockhash %s\n", 
+                               (*miLargestBlock).second.hash.ToString(), (*miLargestBlock).second.hashPrevBlock.ToString());
+                    }
+                }
+                else
+                    assert("No grant possible, but no validation threads are running!");
+
+            } // We must not hold the lock here because we could be waiting for a grant, below.
+
+            // wait for semaphore grant
+            semNewBlocks->wait();
+        }
+        fSemNewBlocks = true;
+    }
+    else {
+        semIBD->wait();
+        fSemNewBlocks = false;
+    }
+
+    boost::thread * tHandleBlockMessage = new boost::thread(boost::bind(&HandleBlockMessageThread, pfrom, strCommand, block, inv, fSemNewBlocks));
+    {
+        LOCK(cs_blockvalidationthread);
+        mapBlockValidationThreads[tHandleBlockMessage->get_id()].tRef = tHandleBlockMessage;
+        mapBlockValidationThreads[tHandleBlockMessage->get_id()].hash = inv.hash;
+        mapBlockValidationThreads[tHandleBlockMessage->get_id()].hashPrevBlock = block.GetBlockHeader().hashPrevBlock;
+        mapBlockValidationThreads[tHandleBlockMessage->get_id()].nStartTime = GetTimeMillis();
+        mapBlockValidationThreads[tHandleBlockMessage->get_id()].nBlockSize = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
+        LogPrint("parallel", "Launching validation for %s with number of block validation threads running: %d\n", 
+                              block.GetHash().ToString(), mapBlockValidationThreads.size());
+
+        tHandleBlockMessage->detach();
+   }
+}
+void HandleBlockMessageThread(CNode *pfrom, const string &strCommand, CBlock &block, const CInv &inv, bool fSem)
+{
+
     int64_t startTime = GetTimeMicros();
     CValidationState state;
     uint64_t nSizeBlock = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
@@ -1481,6 +1573,30 @@ void HandleBlockMessage(CNode *pfrom, const string &strCommand, CBlock &block, c
 
     // Clear the thinblock timer used for preferential download
     ClearThinBlockTimer(inv.hash);
+
+    // Erase any txns in the block from the orphan cache as they are no longer needed
+    if (IsChainNearlySyncd())
+    {
+        LOCK(cs_orphancache);
+        for (unsigned int i = 0; i < block.vtx.size(); i++)
+            EraseOrphanTx(block.vtx[i].GetHash());
+    }
+    
+    // cleanup thread data structures - this must be done before the thread completes
+    {
+        LOCK(cs_blockvalidationthread);
+        boost::thread::id this_id(boost::this_thread::get_id()); 
+        if (mapBlockValidationThreads.count(this_id))
+            mapBlockValidationThreads.erase(this_id);
+    }
+
+    // release semaphores depending on whether this was IBD or not.  We can not use IsChainNearlySyncd()
+    // because the return value will switch over when IBD is nearly finished and we may end up not releasing
+    // the correct semaphore.
+    if (fSem)
+        semNewBlocks->post();
+    else
+        semIBD->post();
 }
 
 void ConnectToThinBlockNodes()
@@ -1491,8 +1607,6 @@ void ConnectToThinBlockNodes()
         BOOST_FOREACH(const std::string& strAddr, mapMultiArgs["-connect-thinblock"])
         {
             CAddress addr;
-            //NOTE: Because the only nodes we are connecting to here are the ones the user put in their
-            //      bitcoin.conf/commandline args as "-connect-thinblock", we don't use the semaphore to limit outbound connections
             OpenNetworkConnection(addr, NULL, strAddr.c_str());
             MilliSleep(500);
         }

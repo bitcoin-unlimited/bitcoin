@@ -75,6 +75,7 @@ if EXEEXT == ".exe" and "-win" not in opts:
 
 #Tests
 testScripts = [
+    'parallel.py',
     'bip68-112-113-p2p.py',
     'wallet.py',
     'excessive.py',

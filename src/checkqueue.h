@@ -182,6 +182,7 @@ private:
     bool fDone;
 
 public:
+    CCheckQueueControl() {} // BU: parallel block validation
     CCheckQueueControl(CCheckQueue<T>* pqueueIn) : pqueue(pqueueIn), fDone(false)
     {
         // passed queue is supposed to be unused, or NULL
