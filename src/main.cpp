@@ -3357,7 +3357,8 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
             if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip())
                 return true;
 
-            if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : NULL))
+           if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && (pblock->GetHash() == pindexMostWork->GetBlockHash() || IsChainNearlySyncd()) ? pblock : NULL))
+           // if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : NULL))
                 return false;
 
             pindexNewTip = chainActive.Tip();
@@ -5234,8 +5235,9 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             // nodes)
 
             // BUIP010 Extreme Thinblocks: We only do inv/getdata for xthinblocks and so we must have headersfirst turned off
-            if (!IsThinBlocksEnabled())
-                pfrom->PushMessage(NetMsgType::SENDHEADERS);
+            // BU: Parallel Block Validation.  We must have all headers first announcements turned off.
+            //if (!IsThinBlocksEnabled())
+            //    pfrom->PushMessage(NetMsgType::SENDHEADERS);
         }
 
         // BU expedited procecessing requires the exchange of the listening port id but we have to send it in a separate version
@@ -5316,11 +5318,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
     else if (strCommand == NetMsgType::SENDHEADERS)
     {
         LOCK(cs_main);
-        // BUIP010 Xtreme Thinblocks: We only do inv/getdata for xthinblocks and so we must have headersfirst turned off
-        if (IsThinBlocksEnabled())
-            State(pfrom->GetId())->fPreferHeaders = false;
-        else
-            State(pfrom->GetId())->fPreferHeaders = true;
+        State(pfrom->GetId())->fPreferHeaders = true;
     }
 
 
@@ -6110,11 +6108,11 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         // BUIP010 Extreme Thinblocks: Handle Block Message.
         HandleBlockMessage(pfrom, strCommand, block, inv);
-        HandleBlockMessage(pfrom, strCommand, block, inv);
-        HandleBlockMessage(pfrom, strCommand, block, inv);
-        HandleBlockMessage(pfrom, strCommand, block, inv);
-        HandleBlockMessage(pfrom, strCommand, block, inv);
-        HandleBlockMessage(pfrom, strCommand, block, inv);
+        //HandleBlockMessage(pfrom, strCommand, block, inv);
+        //HandleBlockMessage(pfrom, strCommand, block, inv);
+        //HandleBlockMessage(pfrom, strCommand, block, inv);
+        //HandleBlockMessage(pfrom, strCommand, block, inv);
+        //HandleBlockMessage(pfrom, strCommand, block, inv);
     }
 
 
@@ -6658,7 +6656,8 @@ bool SendMessages(CNode* pto)
             // add all to the inv queue.
             LOCK(pto->cs_inventory);
             vector<CBlock> vHeaders;
-            bool fRevertToInv = (!state.fPreferHeaders || pto->vBlockHashesToAnnounce.size() > MAX_BLOCKS_TO_ANNOUNCE);
+            //bool fRevertToInv = (!state.fPreferHeaders || pto->vBlockHashesToAnnounce.size() > MAX_BLOCKS_TO_ANNOUNCE);
+            bool fRevertToInv = true; // BU: this must always be false or it breaks a few things for parallel validation
             CBlockIndex *pBestIndex = NULL; // last header queued for delivery
             ProcessBlockAvailability(pto->id); // ensure pindexBestKnownBlock is up-to-date
 
