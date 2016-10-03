@@ -470,7 +470,7 @@ public:
     CCheckQueue<CScriptCheck>* GetScriptCheckQueue(boost::shared_ptr<boost::mutex> mutex)
     {
         // find the scriptcheckqueue that is associated with this mutex
-        for (int i = 0; i < vScriptCheckQueues.size(); i++) {
+        for (unsigned int i = 0; i < vScriptCheckQueues.size(); i++) {
             if (vScriptCheckQueues[i].scriptcheck_mutex == mutex) {
                 LogPrint("parallel", "next script check queue selected is %d\n", i);
                 return vScriptCheckQueues[i].scriptcheckqueue;
@@ -482,7 +482,7 @@ public:
     {
         // for newly mined block validation, return the first queue not in use.
         if (IsChainNearlySyncd()) {
-            for (int i = 0; i < vScriptCheckQueues.size(); i++) {
+            for (unsigned int i = 0; i < vScriptCheckQueues.size(); i++) {
                 if (vScriptCheckQueues[i].scriptcheckqueue->IsIdle()) {
                     LogPrint("parallel", "next mutex not in use is %d\n", i);
                     return vScriptCheckQueues[i].scriptcheck_mutex;
@@ -493,13 +493,13 @@ public:
         }
         // for IBD return the next queue. It doesn't matter if it's in use or not.
         else {
-            static int8_t nextQueue = 0;
+            static unsigned int nextQueue = 0;
             nextQueue++;
             if (nextQueue >= vScriptCheckQueues.size())
                 nextQueue = 0;
             LogPrint("parallel", "next mutex selected is %d\n", nextQueue);
             return vScriptCheckQueues[nextQueue].scriptcheck_mutex;
-        }  
+        }
     }
 };
 

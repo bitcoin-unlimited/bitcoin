@@ -212,18 +212,17 @@ class ParallelTest (BitcoinTestFramework):
         # node0 has the bigger block and was sent and began processing first, however the block from node2
         # should have come in after and beaten node0's block.  Therefore the blockhash from chaintip from 
         # node2 should now match the blockhash from the chaintip on node1; and node0 and node1 should not match.
+        time.sleep(15) # wait here to make sure a re-org does not happen on node0 so we want to give it some time.
         assert_equal(self.nodes[1].getbestblockhash(), self.nodes[2].getbestblockhash())
         assert_not_equal(self.nodes[0].getbestblockhash(), self.nodes[1].getbestblockhash())
 
 
         # Send some transactions and Mine a block on node 2.  
-        # This should cause node 0 to re-org and all chains should now match.
-        send_to = {}
-        for i in xrange(10):
-            send_to[self.nodes[2].getnewaddress()] = Decimal("0.01")
-        self.nodes[2].sendmany("", send_to)
+        # This should cause node0 to re-org and all chains should now match.
+        for i in xrange(5):
+            self.nodes[2].sendtoaddress(self.nodes[2].getnewaddress(), .01)
         self.nodes[2].generate(1)
-        self.sync_all()
+        sync_blocks(self.nodes)
         assert_equal(self.nodes[1].getbestblockhash(), self.nodes[2].getbestblockhash())
         assert_equal(self.nodes[0].getbestblockhash(), self.nodes[1].getbestblockhash())
 

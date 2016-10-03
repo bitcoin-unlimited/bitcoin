@@ -3278,13 +3278,19 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
     // Build list of new blocks to connect.
     std::vector<CBlockIndex*> vpindexToConnect;
     bool fContinue = true;
+    /** Parallel Validation: fBlock determines whether we pass a block or NULL to ConnectTip().
+     *  If the pindexMostWork has been extended while we have been validating the last block then we
+     *  want to pass a NULL so that the next block is read from disk, because we will definitely not 
+     *  have the block. 
+     */
+    bool fBlock = true;
     int nHeight = pindexFork ? pindexFork->nHeight : -1;
     while (fContinue && nHeight != pindexMostWork->nHeight) {
         // Don't iterate the entire list of potential improvements toward the best tip, as we likely only need
         // a few blocks along the way.
         int nTargetHeight = std::min(nHeight + 32, pindexMostWork->nHeight);
         vpindexToConnect.clear();
-        vpindexToConnect.reserve(nTargetHeight - nHeight);
+        //vpindexToConnect.reserve(nTargetHeight - nHeight);
         CBlockIndex *pindexIter = pindexMostWork->GetAncestor(nTargetHeight);
         while (pindexIter && pindexIter->nHeight != nHeight) {
             vpindexToConnect.push_back(pindexIter);
@@ -3294,7 +3300,7 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
 
         // Connect new blocks.
         BOOST_REVERSE_FOREACH(CBlockIndex *pindexConnect, vpindexToConnect) {
-            if (!ConnectTip(state, chainparams, pindexConnect, pindexConnect == pindexMostWork ? pblock : NULL)) {
+            if (!ConnectTip(state, chainparams, pindexConnect, pindexConnect == pindexMostWork && fBlock? pblock : NULL)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
                     if (!state.CorruptionPossible())
@@ -3310,12 +3316,18 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
             } else {
                 PruneBlockIndexCandidates();
                 if (!pindexOldTip || chainActive.Tip()->nChainWork > pindexOldTip->nChainWork) {
+                    /* BU: these are commented out for parallel validation: 
+                           We must always continue so as to find if the pindexMostWork has advanced while we've
+                           been trying to connect the last block.
                     // We're in a better position than we were. Return temporarily to release the lock.
                     fContinue = false;
                     break;
+                    */
                 }
             }
         }
+        pindexMostWork = FindMostWorkChain();
+        fBlock = false;
     }
 
     if (fBlocksDisconnected) {
@@ -3354,11 +3366,43 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
             pindexMostWork = FindMostWorkChain();
 
             // Whether we have anything to do at all.
-            if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip())
+            // if (pindexMostWork == NULL || pindexMostWork == chainActive.Tip())
+            // BU: parallel validation - we compare index heights because with parallel validation the pindexMostWork
+            //     may not be equal to the chainActive.Tip() however the heights will be equal.  
+            if (pindexMostWork == NULL || pindexMostWork->nHeight == chainActive.Height())
                 return true;
 
-           if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && (pblock->GetHash() == pindexMostWork->GetBlockHash() || IsChainNearlySyncd()) ? pblock : NULL))
-           // if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : NULL))
+            //** PARALLEL BLOCK VALIDATION
+            // Find the CBlockIndex of this block if this blocks previous hash matches the old chaintip.  In the
+            // case of parallel block validation we may have two or more blocks processing at the same time however
+            // their block headers may not represent what is considered the best block. Therefore we must supply the
+            // blockindex of this block explicitly as being the one with potentially the most work.
+            if (pblock != NULL && pindexOldTip != NULL && IsChainNearlySyncd() && pindexOldTip->nHeight > 1)
+            {
+                if (pblock->GetBlockHeader().hashPrevBlock == *pindexOldTip->phashBlock)
+                {
+                    BlockMap::iterator mi = mapBlockIndex.find(pblock->GetHash());
+                    if (mi == mapBlockIndex.end()) {
+                        LogPrintf("Could not find block in mapBlockIndex: %s\n", pblock->GetHash().ToString());
+                        return false;
+                    }
+                    else {
+                        pindexMostWork = (*mi).second;
+                        // check to see if the chain exends further into the future from here. This could happen if 
+                        // two new blocks show up out of order.
+                        std::set<CBlockIndex*, CBlockIndexWorkComparator>::iterator it = setBlockIndexCandidates.begin();
+                        while (it != setBlockIndexCandidates.end()) {
+                             if ((*it)->pprev->phashBlock == pindexMostWork->phashBlock) {
+                                 pindexMostWork = *it;
+                             }
+                             ++it;
+                        }
+
+                    }
+                }
+            }
+
+            if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : NULL))
                 return false;
 
             pindexNewTip = chainActive.Tip();
