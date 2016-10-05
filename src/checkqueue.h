@@ -192,6 +192,17 @@ public:
         }
     }
 
+    void Queue(CCheckQueue<T>* pqueueIn)
+    {
+        pqueue = pqueueIn;
+        // passed queue is supposed to be unused, or NULL
+        if (pqueue != NULL) {
+            bool isIdle = pqueue->IsIdle();
+            assert(isIdle);
+            fDone = false;
+        }
+    }
+
     bool Wait()
     {
         if (pqueue == NULL)

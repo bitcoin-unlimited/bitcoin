@@ -88,6 +88,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
 
     LOCK(cs_main);
     fCheckpointsEnabled = false;
+    AddAllScriptCheckQueues(); // Parallel Validation
 
     // Simple block creation, nothing special yet:
     BOOST_CHECK(pblocktemplate = CreateNewBlock(chainparams, scriptPubKey));

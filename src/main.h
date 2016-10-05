@@ -453,9 +453,10 @@ private:
             }
     };
     std::vector<CScriptCheckQueue> vScriptCheckQueues;
+    boost::shared_ptr<boost::mutex> dummy_mutex;
 
 public:
-    CAllScriptCheckQueues() {}
+    CAllScriptCheckQueues() : dummy_mutex(new boost::mutex) {}
 
     void Add(CCheckQueue<CScriptCheck>* pqueueIn)
     {
@@ -475,13 +476,14 @@ public:
                 LogPrint("parallel", "next script check queue selected is %d\n", i);
                 return vScriptCheckQueues[i].scriptcheckqueue;
             }
-        }  
+        }
+        return  NULL;
     }
 
     boost::shared_ptr<boost::mutex> GetScriptCheckMutex()
     {
         // for newly mined block validation, return the first queue not in use.
-        if (IsChainNearlySyncd()) {
+        if (IsChainNearlySyncd() && vScriptCheckQueues.size() > 0) {
             for (unsigned int i = 0; i < vScriptCheckQueues.size(); i++) {
                 if (vScriptCheckQueues[i].scriptcheckqueue->IsIdle()) {
                     LogPrint("parallel", "next mutex not in use is %d\n", i);
@@ -492,14 +494,16 @@ public:
             }
         }
         // for IBD return the next queue. It doesn't matter if it's in use or not.
-        else {
+        else if (vScriptCheckQueues.size() > 0){
             static unsigned int nextQueue = 0;
             nextQueue++;
+
             if (nextQueue >= vScriptCheckQueues.size())
                 nextQueue = 0;
             LogPrint("parallel", "next mutex selected is %d\n", nextQueue);
             return vScriptCheckQueues[nextQueue].scriptcheck_mutex;
         }
+        return dummy_mutex;
     }
 };
 

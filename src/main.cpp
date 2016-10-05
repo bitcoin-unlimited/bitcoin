@@ -450,10 +450,10 @@ bool MarkBlockAsReceived(const uint256& hash) {
 }
 
 // Returns time at which to timeout block request (nTime in microseconds)
-int64_t GetBlockTimeout(int64_t nTime, int nValidatedQueuedBefore, const Consensus::Params &consensusParams)
-{
-    return nTime + 500000 * consensusParams.nPowTargetSpacing * (4 + nValidatedQueuedBefore);
-}
+//int64_t GetBlockTimeout(int64_t nTime, int nValidatedQueuedBefore, const Consensus::Params &consensusParams)
+//{
+//   return nTime + 500000 * consensusParams.nPowTargetSpacing * (4 + nValidatedQueuedBefore);
+//}
 
   // BU MarkBlockAsInFlight moved out of anonymous namespace
 
@@ -2562,7 +2562,6 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     blockundo.vtxundo.reserve(block.vtx.size() - 1);
     int nChecked = 0;
     int nOrphansChecked = 0;
-    int64_t nMutexLockTime = GetTimeMicros();
     int nStartingHeight = chainActive.Height();
 
     // Create a vector for storing hashes that will be deleted from the unverified and perverified txn sets.
@@ -2581,10 +2580,12 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     // with the mutex so other thread can used this scriptcheckqueue until all inputs have been checked and the 
     // scriptcheckqueue threads have all returned.
     boost::shared_ptr<boost::mutex> scriptcheck_mutex = allScriptCheckQueues.GetScriptCheckMutex();
-    cs_main.unlock(); // unlock cs_main, we may be waiting here for a while before aquiring the scoped lock below
-    boost::mutex::scoped_lock lock(*scriptcheck_mutex); // This scoped lock must be aquired before we unlock cs_main further down.
-    CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? allScriptCheckQueues.GetScriptCheckQueue(scriptcheck_mutex) : NULL);
-    cs_main.lock(); // re-aquire lock
+    if (fParallel) cs_main.unlock(); // unlock cs_main, we may be waiting here for a while before aquiring the scoped lock below
+    boost::mutex::scoped_lock lock(*scriptcheck_mutex);
+    CCheckQueue<CScriptCheck>* scriptQueue = allScriptCheckQueues.GetScriptCheckQueue(scriptcheck_mutex);
+    assert(scriptQueue != NULL);
+    CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? scriptQueue : NULL);
+    if (fParallel) cs_main.lock(); // re-aquire lock
 
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
