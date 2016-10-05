@@ -2446,7 +2446,7 @@ static int64_t nTimeIndex = 0;
 static int64_t nTimeCallbacks = 0;
 static int64_t nTimeTotal = 0;
 
-bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, bool fJustCheck)
+bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, bool fJustCheck, bool fParallel)
 {
     /** BU: Start Section to validate inputs - if there are parallel blocks being checked 
      *      then the winner of this race will get to update the UTXO.
@@ -2650,10 +2650,11 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
                 if ((inOrphanCache) || (!inVerifiedCache && !inOrphanCache))
                 {
-                    // ** Unlock cs_main for a short while to give any other threads a chance to process in parallel. 
-                    // This is crucial for parallel validation to work. CheckInputs does not have to be locked as it has it's own
-                    // internal locking mechanism with shared locks for reading and unique locks for writing.
-                    cs_main.unlock();
+                    // ** if in parallel mode then unlock cs_main for a short while to give any other threads
+                    // a chance to process in parallel. This is crucial for parallel validation to work. 
+                    // NOTE: CheckInputs does not have to be locked as it has it's own
+                    // internal locking mechanism with shared locks for reading, and unique locks for writing.
+                    if (fParallel) cs_main.unlock();
 
                     LogPrint("parallel", "checking inputs for tx: %d\n", i);
                     if (inOrphanCache)
@@ -2668,7 +2669,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                     }
                     control.Add(vChecks);
                     nChecked++;
-                    cs_main.lock();
+                    if (fParallel) cs_main.lock();
                 }
                 else {
                     vHashesToDelete.push_back(hash);
@@ -2696,11 +2697,11 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                                REJECT_INVALID, "bad-cb-amount");
 
     // Wait for all sig check threads to finish before updating utxo
-    cs_main.unlock(); // unlock while waiting.
+    if (fParallel) cs_main.unlock(); // unlock while waiting.
     LogPrint("parallel", "Waiting for script threads to finish\n");
     if (!control.Wait())
         return state.DoS(100, false);
-    cs_main.lock();
+    if (fParallel) cs_main.lock();
 
     if (fJustCheck)
         return true;
@@ -3087,7 +3088,7 @@ static int64_t nTimePostConnect = 0;
  * Connect a new block to chainActive. pblock is either NULL or a pointer to a CBlock
  * corresponding to pindexNew, to bypass loading it again from disk.
  */
-bool static ConnectTip(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexNew, const CBlock* pblock)
+bool static ConnectTip(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexNew, const CBlock* pblock, bool fParallel)
 {
     assert(pindexNew->pprev == chainActive.Tip());
     // Read block from disk.
@@ -3104,7 +3105,7 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     LogPrint("bench", "  - Load block from disk: %.2fms [%.2fs]\n", (nTime2 - nTime1) * 0.001, nTimeReadFromDisk * 0.000001);
     {
         CCoinsViewCache view(pcoinsTip);
-        bool rv = ConnectBlock(*pblock, state, pindexNew, view);
+        bool rv = ConnectBlock(*pblock, state, pindexNew, view, false, fParallel);
         GetMainSignals().BlockChecked(*pblock, state);
         if (!rv) {
             if (state.IsInvalid())
@@ -3260,7 +3261,7 @@ static void PruneBlockIndexCandidates() {
  * Try to make some progress towards making pindexMostWork the active block.
  * pblock is either NULL or a pointer to a CBlock corresponding to pindexMostWork.
  */
-static bool ActivateBestChainStep(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexMostWork, const CBlock* pblock)
+static bool ActivateBestChainStep(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexMostWork, const CBlock* pblock, bool fParallel)
 {
     AssertLockHeld(cs_main);
     bool fInvalidFound = false;
@@ -3300,7 +3301,7 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
 
         // Connect new blocks.
         BOOST_REVERSE_FOREACH(CBlockIndex *pindexConnect, vpindexToConnect) {
-            if (!ConnectTip(state, chainparams, pindexConnect, pindexConnect == pindexMostWork && fBlock? pblock : NULL)) {
+            if (!ConnectTip(state, chainparams, pindexConnect, pindexConnect == pindexMostWork && fBlock? pblock : NULL, fParallel)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
                     if (!state.CorruptionPossible())
@@ -3350,7 +3351,7 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
  * or an activated best chain. pblock is either NULL or a pointer to a block
  * that is already loaded (to avoid loading it again from disk).
  */
-bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams, const CBlock *pblock) {
+bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams, const CBlock *pblock, bool fParallel) {
     CBlockIndex *pindexMostWork = NULL;
     do {
         boost::this_thread::interruption_point();
@@ -3402,7 +3403,7 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
                 }
             }
 
-            if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : NULL))
+            if (!ActivateBestChainStep(state, chainparams, pindexMostWork, pblock && pblock->GetHash() == pindexMostWork->GetBlockHash() ? pblock : NULL, fParallel))
                 return false;
 
             pindexNewTip = chainActive.Tip();
@@ -4000,7 +4001,7 @@ static bool IsSuperMajority(int minVersion, const CBlockIndex* pstart, unsigned 
 }
 
 
-bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, const CNode* pfrom, const CBlock* pblock, bool fForceProcessing, CDiskBlockPos* dbp)
+bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, const CNode* pfrom, const CBlock* pblock, bool fForceProcessing, CDiskBlockPos* dbp, bool fParallel)
 {
     LogPrint("thin", "Processing new block %s from peer %s (%d).\n", pblock->GetHash().ToString(), pfrom ? pfrom->addrName.c_str():"myself",pfrom ? pfrom->id: 0);
     // Preliminary checks
@@ -4040,7 +4041,7 @@ bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, c
 	  }
     }
 
-    if (!ActivateBestChain(state, chainparams, pblock))
+    if (!ActivateBestChain(state, chainparams, pblock, fParallel))
         return error("%s: ActivateBestChain failed", __func__);
 
     return true;
@@ -4519,7 +4520,7 @@ bool InitBlockIndex(const CChainParams& chainparams)
             CBlockIndex *pindex = AddToBlockIndex(block);
             if (!ReceivedBlockTransactions(block, state, pindex, blockPos))
                 return error("LoadBlockIndex(): genesis block not accepted");
-            if (!ActivateBestChain(state, chainparams, &block))
+            if (!ActivateBestChain(state, chainparams, &block, false))
                 return error("LoadBlockIndex(): genesis block cannot be activated");
             // Force a chainstate write so that when we VerifyDB in a moment, it doesn't check stale data
             return FlushStateToDisk(state, FLUSH_STATE_ALWAYS);
@@ -4589,7 +4590,7 @@ bool LoadExternalBlockFile(const CChainParams& chainparams, FILE* fileIn, CDiskB
                 // process in case the block isn't known yet
                 if (mapBlockIndex.count(hash) == 0 || (mapBlockIndex[hash]->nStatus & BLOCK_HAVE_DATA) == 0) {
                     CValidationState state;
-                    if (ProcessNewBlock(state, chainparams, NULL, &block, true, dbp))
+                    if (ProcessNewBlock(state, chainparams, NULL, &block, true, dbp, false))
                         nLoaded++;
                     if (state.IsError())
                         break;
@@ -4611,7 +4612,7 @@ bool LoadExternalBlockFile(const CChainParams& chainparams, FILE* fileIn, CDiskB
                             LogPrintf("%s: Processing out of order child %s of %s\n", __func__, block.GetHash().ToString(),
                                     head.ToString());
                             CValidationState dummy;
-                            if (ProcessNewBlock(dummy, chainparams, NULL, &block, true, &it->second))
+                            if (ProcessNewBlock(dummy, chainparams, NULL, &block, true, &it->second, false))
                             {
                                 nLoaded++;
                                 queue.push_back(block.GetHash());
@@ -6152,11 +6153,6 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
         // BUIP010 Extreme Thinblocks: Handle Block Message.
         HandleBlockMessage(pfrom, strCommand, block, inv);
-        //HandleBlockMessage(pfrom, strCommand, block, inv);
-        //HandleBlockMessage(pfrom, strCommand, block, inv);
-        //HandleBlockMessage(pfrom, strCommand, block, inv);
-        //HandleBlockMessage(pfrom, strCommand, block, inv);
-        //HandleBlockMessage(pfrom, strCommand, block, inv);
     }
 
 

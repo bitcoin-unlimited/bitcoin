@@ -1517,7 +1517,7 @@ void HandleBlockMessageThread(CNode *pfrom, const string &strCommand, CBlock &bl
     bool forceProcessing = pfrom->fWhitelisted && !IsInitialBlockDownload();
     const CChainParams& chainparams = Params();
     pfrom->firstBlock += 1;
-    ProcessNewBlock(state, chainparams, pfrom, &block, forceProcessing, NULL);
+    ProcessNewBlock(state, chainparams, pfrom, &block, forceProcessing, NULL, true);
     int nDoS;
     if (state.IsInvalid(nDoS)) {
         LogPrintf("Invalid block due to %s\n", state.GetRejectReason().c_str());
