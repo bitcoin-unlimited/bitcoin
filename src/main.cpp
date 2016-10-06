@@ -2700,8 +2700,11 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     // Wait for all sig check threads to finish before updating utxo
     if (fParallel) cs_main.unlock(); // unlock while waiting.
     LogPrint("parallel", "Waiting for script threads to finish\n");
-    if (!control.Wait())
+    if (!control.Wait()) {
+        // if we end up here then the signature verification failed and we must re-lock cs_main before returning.
+        if (fParallel) cs_main.lock();
         return state.DoS(100, false);
+    }
     if (fParallel) cs_main.lock();
 
     if (fJustCheck)
@@ -3328,10 +3331,9 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
                 }
             }
         }
-        pindexMostWork = FindMostWorkChain();
-        fBlock = false;
+        if (fContinue) pindexMostWork = FindMostWorkChain();
+        fBlock = false; //read next blocks from disk
     }
-
     if (fBlocksDisconnected) {
         mempool.removeForReorg(pcoinsTip, chainActive.Tip()->nHeight + 1, STANDARD_LOCKTIME_VERIFY_FLAGS);
         LimitMempoolSize(mempool, GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000, GetArg("-mempoolexpiry", DEFAULT_MEMPOOL_EXPIRY) * 60 * 60);
@@ -3339,8 +3341,10 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
     mempool.check(pcoinsTip);
 
     // Callbacks/notifications for a new best chain.
-    if (fInvalidFound)
+    if (fInvalidFound) {
         CheckForkWarningConditionsOnNewFork(vpindexToConnect.back());
+        return false;
+    }
     else
         CheckForkWarningConditions();
 
@@ -3354,6 +3358,7 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
  */
 bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams, const CBlock *pblock, bool fParallel) {
     CBlockIndex *pindexMostWork = NULL;
+    LOCK(cs_main);
     do {
         boost::this_thread::interruption_point();
         if (ShutdownRequested())
@@ -3363,7 +3368,7 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
         const CBlockIndex *pindexFork;
         bool fInitialDownload;
         {
-            LOCK(cs_main);
+            //LOCK(cs_main);
             CBlockIndex *pindexOldTip = chainActive.Tip();
             pindexMostWork = FindMostWorkChain();
 
@@ -3455,9 +3460,8 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
     CheckBlockIndex(chainparams.GetConsensus());
 
     // Write changes periodically to disk, after relay.
-    if (!FlushStateToDisk(state, FLUSH_STATE_PERIODIC)) {
+    if (!FlushStateToDisk(state, FLUSH_STATE_PERIODIC))
         return false;
-    }
 
     return true;
 }
