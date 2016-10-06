@@ -80,6 +80,7 @@ CNodeSignals g_signals __attribute__((init_priority(109)));
 CNetCleanup cnet_instance_cleanup __attribute__((init_priority(110)));  // Must construct after statistics, because CNodes use statistics.  In particular, seg fault on osx during exit because constructor/destructor order is not guaranteed between modules in clang.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 std::string ExcessiveBlockValidator(const unsigned int& value,unsigned int* item,bool validate)
 {
   if (validate)
@@ -1422,9 +1423,9 @@ void HandleBlockMessage(CNode *pfrom, const string &strCommand, CBlock &block, c
 {
     uint64_t nBlockSize = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
 
-    // Initialize Semaphores used to limit the total number of concurrent validation threads.
+    /** Initialize Semaphores used to limit the total number of concurrent validation threads. */
     if (semIBD == NULL)
-        semIBD = new CSemaphore(128);
+        semIBD = new CSemaphore(32);
     if (semNewBlocks == NULL)
         semNewBlocks = new CSemaphore(4); // this must be equal to the number of scriptcheck queues (currently at 4)
   

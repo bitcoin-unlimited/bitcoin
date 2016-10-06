@@ -120,6 +120,10 @@ extern CSemaphore *semOutbound;
 static CSemaphore *semOutboundAddNode; // BU: separate semaphore for -addnodes
 boost::condition_variable messageHandlerCondition;
 
+// BU Parallel validation
+CSemaphore *semIBD;       // semaphore for IBD threads
+CSemaphore *semNewBlocks; // semaphore for parallel validation threads
+
 // BU  Connection Slot mitigation - used to determine how many connection attempts over time
 std::map<CNetAddr, ConnectionHistory> mapInboundConnectionTracker;
 CCriticalSection cs_mapInboundConnectionTracker;
@@ -2287,6 +2291,12 @@ CNetCleanup::~CNetCleanup()
         semOutboundAddNode = NULL;
         delete pnodeLocalHost;
         pnodeLocalHost = NULL;
+
+        //BU: clean up the parallel validation semaphores
+        delete semIBD;
+        semIBD = NULL;
+        delete semNewBlocks;
+        semNewBlocks = NULL;
 
 #ifdef WIN32
         // Shutdown Windows Sockets

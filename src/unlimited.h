@@ -140,6 +140,10 @@ extern CLeakyBucket sendShaper;
 // Test to determine if traffic shaping is enabled
 extern bool IsTrafficShapingEnabled();
 
+// Parallel Validation
+extern CSemaphore *semIBD;       // semaphore for IBD threads
+extern CSemaphore *semNewBlocks; // semaphore for parallel validation threads
+
 // BUIP010 Xtreme Thinblocks: begin
 
 // Xpress Validation: begin
