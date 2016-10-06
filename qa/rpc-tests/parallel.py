@@ -50,6 +50,7 @@ class ParallelTest (BitcoinTestFramework):
         self.nodes.append(start_node(2, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
 
         # Create many utxo's
+        print "Generating txns..."
         send_to = {}
         self.nodes[0].keypoolrefill(100)
         self.nodes[0].keypoolrefill(100)
@@ -116,6 +117,7 @@ class ParallelTest (BitcoinTestFramework):
         self.nodes.append(start_node(2, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
 
         # Send more transactions
+        print "Generating more txns..."
         output_total = Decimal(0)
         j = 0
         self.utxo = self.nodes[0].listunspent()
@@ -129,7 +131,6 @@ class ParallelTest (BitcoinTestFramework):
             utxo = self.utxo.pop()
             if utxo["amount"] > Decimal("0.0100000") or utxo["amount"] < Decimal("0.0100000"):
                 continue
-            print "this is " + str(j)
             if utxo["spendable"] is True:
                 j = j + 1
                 inputs.append({ "txid" : utxo["txid"], "vout" : utxo["vout"]})
@@ -161,6 +162,7 @@ class ParallelTest (BitcoinTestFramework):
 
 
         # create transactions with many inputs
+        print "Generating even more txns..."
         num_txns2 = 5
         self.utxo = self.nodes[0].listunspent()
         for i in xrange(num_txns2):
@@ -174,11 +176,9 @@ class ParallelTest (BitcoinTestFramework):
                 utxo = self.utxo.pop()
                 if utxo["amount"] > Decimal("0.0100000") or utxo["amount"] < Decimal("0.0100000"):
                     continue
-                print j
                 j = j + 1
                 inputs.append({ "txid" : utxo["txid"], "vout" : utxo["vout"]})
                 output_total = output_total + utxo["amount"]
-                print output_total
             outputs[self.nodes[0].getnewaddress()] = output_total/2 - Decimal("0.001")
             outputs[self.nodes[0].getnewaddress()] = output_total/2 - Decimal("0.001")
             raw_tx = self.nodes[0].createrawtransaction(inputs, outputs)

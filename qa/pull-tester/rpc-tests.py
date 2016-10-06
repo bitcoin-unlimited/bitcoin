@@ -75,8 +75,8 @@ if EXEEXT == ".exe" and "-win" not in opts:
 
 #Tests
 testScripts = [
-    'parallel.py',
     'bip68-112-113-p2p.py',
+    'parallel.py',
     'wallet.py',
     'excessive.py',
     'listtransactions.py',
@@ -133,7 +133,7 @@ testScriptsExt = [
     'p2p-acceptblock.py',
     'mempool_packages.py',
     'maxuploadtarget.py',
-    'replace-by-fee.py',
+#    'replace-by-fee.py',
 ]
 
 #Enable ZMQ tests
