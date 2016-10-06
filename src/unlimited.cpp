@@ -1506,7 +1506,7 @@ void HandleBlockMessage(CNode *pfrom, const string &strCommand, CBlock &block, c
 }
 void HandleBlockMessageThread(CNode *pfrom, const string &strCommand, CBlock &block, const CInv &inv, bool fSem)
 {
-
+    bool fParallel = true;
     int64_t startTime = GetTimeMicros();
     CValidationState state;
     uint64_t nSizeBlock = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
@@ -1518,7 +1518,9 @@ void HandleBlockMessageThread(CNode *pfrom, const string &strCommand, CBlock &bl
     bool forceProcessing = pfrom->fWhitelisted && !IsInitialBlockDownload();
     const CChainParams& chainparams = Params();
     pfrom->firstBlock += 1;
-    ProcessNewBlock(state, chainparams, pfrom, &block, forceProcessing, NULL, true);
+    if (!IsChainNearlySyncd()) // Don't run parallel validation during IBD.
+        fParallel = false;
+    ProcessNewBlock(state, chainparams, pfrom, &block, forceProcessing, NULL, fParallel);
     int nDoS;
     if (state.IsInvalid(nDoS)) {
         LogPrintf("Invalid block due to %s\n", state.GetRejectReason().c_str());
