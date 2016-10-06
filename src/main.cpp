@@ -415,7 +415,7 @@ bool MarkBlockAsReceived(const uint256& hash) {
 
         LogPrint("thin", "Received block %s in %.2f seconds\n", hash.ToString(), nResponseTime);
         LogPrint("thin", "Average block response time is %.2f seconds\n", avgResponseTime);
-        LogPrintf("BLOCK_DOWNLOAD_WINDOW is %d MAX_BLOCKS_IN_TRANSIT_PER_PEER is %d\n", BLOCK_DOWNLOAD_WINDOW, MAX_BLOCKS_IN_TRANSIT_PER_PEER);
+        LogPrint("thin", "BLOCK_DOWNLOAD_WINDOW is %d MAX_BLOCKS_IN_TRANSIT_PER_PEER is %d\n", BLOCK_DOWNLOAD_WINDOW, MAX_BLOCKS_IN_TRANSIT_PER_PEER);
 
         {
             LOCK(cs_vNodes);
@@ -2657,7 +2657,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                     // internal locking mechanism with shared locks for reading, and unique locks for writing.
                     if (fParallel) cs_main.unlock();
 
-                    LogPrint("parallel", "checking inputs for tx: %d\n", i);
+                    LogPrint("parallel_2", "checking inputs for tx: %d\n", i);
                     if (inOrphanCache)
                         nOrphansChecked++;
 
