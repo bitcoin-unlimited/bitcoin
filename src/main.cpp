@@ -4720,15 +4720,17 @@ void static CheckBlockIndex(const Consensus::Params& consensusParams)
         }
         if (!CBlockIndexWorkComparator()(pindex, chainActive.Tip()) && pindexFirstNeverProcessed == NULL) {
             if (pindexFirstInvalid == NULL) {
+                // BU: parallel validation - this check is no longer valid at times. setBlockIndexCandidates
+                //     may or may not have entries at this point.
                 // If this block sorts at least as good as the current tip and
                 // is valid and we have all data for its parents, it must be in
                 // setBlockIndexCandidates.  chainActive.Tip() must also be there
                 // even if some data has been pruned.
-              if ((!chainContainsExcessive(pindex)) && (pindexFirstMissing == NULL || pindex == chainActive.Tip()) )  // BU: if the chain is excessive it won't be on the list of active chain candidates
-                assert(setBlockIndexCandidates.count(pindex));
-                // If some parent is missing, then it could be that this block was in
-                // setBlockIndexCandidates but had to be removed because of the missing data.
-                // In this case it must be in mapBlocksUnlinked -- see test below.
+                // if ((!chainContainsExcessive(pindex)) && (pindexFirstMissing == NULL || pindex == chainActive.Tip()) )  // BU: if the chain is excessive it won't be on the list of active chain candidates
+                    //assert(setBlockIndexCandidates.count(pindex));
+                    // If some parent is missing, then it could be that this block was in
+                    // setBlockIndexCandidates but had to be removed because of the missing data.
+                    // In this case it must be in mapBlocksUnlinked -- see test below.
             }
         } else { // If this block sorts worse than the current tip or some ancestor's block has never been seen, it cannot be in setBlockIndexCandidates.
             assert(setBlockIndexCandidates.count(pindex) == 0);
