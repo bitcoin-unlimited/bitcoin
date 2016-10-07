@@ -3391,7 +3391,7 @@ bool ActivateBestChain(CValidationState &state, const CChainParams& chainparams,
             // case of parallel block validation we may have two or more blocks processing at the same time however
             // their block headers may not represent what is considered the best block. Therefore we must supply the
             // blockindex of this block explicitly as being the one with potentially the most work.
-            if (pblock != NULL && pindexOldTip != NULL && IsChainNearlySyncd() && pindexOldTip->nHeight > 1)
+            if (pblock != NULL && pindexOldTip != NULL && fParallel && pindexOldTip->nHeight > 1)
             {
                 if (pblock->GetBlockHeader().hashPrevBlock == *pindexOldTip->phashBlock)
                 {
