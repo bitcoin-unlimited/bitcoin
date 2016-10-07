@@ -175,6 +175,7 @@ void UnlimitedPushTxns(CNode* dest);
 // BUIP010 Xtreme Thinblocks Variables
 std::map<uint256, uint64_t> mapThinBlockTimer;
 bool fIsChainNearlySyncd;
+CCriticalSection cs_ischainnearlysyncd;
 
 //! The largest block size that we have seen since startup
 uint64_t nLargestBlockSeen=BLOCKSTREAM_CORE_MAX_BLOCK_SIZE; // BU - Xtreme Thinblocks
@@ -1195,7 +1196,7 @@ bool CanThinBlockBeDownloaded(CNode* pto)
 // This way we avoid having to lock cs_main so often which tends to be a bottleneck.
 void IsChainNearlySyncdInit() 
 {
-    LOCK(cs_main);
+    LOCK2(cs_main, cs_ischainnearlysyncd);
     if (!pindexBestHeader) fIsChainNearlySyncd = false;  // Not nearly synced if we don't have any blocks!
     else
       {
@@ -1207,6 +1208,7 @@ void IsChainNearlySyncdInit()
 }
 bool IsChainNearlySyncd()
 {
+    LOCK(cs_ischainnearlysyncd);
     return fIsChainNearlySyncd;
 }
 
