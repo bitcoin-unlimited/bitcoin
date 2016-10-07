@@ -2587,6 +2587,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? scriptQueue : NULL);
     if (fParallel) cs_main.lock(); // re-aquire lock
 
+    if (!fParallel) cs_xval.lock();
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         const CTransaction &tx = block.vtx[i];
@@ -2664,7 +2665,10 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                     std::vector<CScriptCheck> vChecks;
                     bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
                     if (!CheckInputs(tx, state, viewTempCache, fScriptChecks, flags, fCacheResults, nScriptCheckThreads ? &vChecks : NULL)) {
-                        if (fParallel) cs_main.lock();
+                        if (fParallel)
+                            cs_main.lock();
+                        else
+                            cs_xval.unlock();
                         return error("ConnectBlock(): CheckInputs on %s failed with %s", 
                                               tx.GetHash().ToString(), FormatStateMessage(state));
                     }
@@ -2688,6 +2692,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
         boost::this_thread::interruption_point();
     }
+    if (!fParallel) cs_xval.unlock();
     LogPrint("thin", "Number of CheckInputs() performed: %d  Orphan count: %d\n", nChecked, nOrphansChecked);
 
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
