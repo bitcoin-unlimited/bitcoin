@@ -2592,9 +2592,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? scriptQueue : NULL);
     //allScriptCheckQueues.AddControl(scriptcheck_mutex, &control);
 
-    // Re-aquire cs_main if necessary and also lock cs_xval if necessary
+    // Re-aquire cs_main if necessary 
     if (fParallel) cs_main.lock();
-    if (!fParallel) cs_xval.lock();
 
     // Start checking Inputs
     for (unsigned int i = 0; i < block.vtx.size(); i++)
@@ -2619,9 +2618,10 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                     LogPrint("parallel", "Chain Height %d is greater than starting height %d\n", chainActive.Height(), nStartingHeight);
                     return false;
                 }
-                else 
+                else
                     return state.DoS(100, error("ConnectBlock(): inputs missing/spent"),
                                  REJECT_INVALID, "bad-txns-inputs-missingorspent");
+                
             }
 
             // Check that transaction is BIP68 final
@@ -2674,10 +2674,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                     std::vector<CScriptCheck> vChecks;
                     bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
                     if (!CheckInputs(tx, state, viewTempCache, fScriptChecks, flags, fCacheResults, nScriptCheckThreads ? &vChecks : NULL)) {
-                        if (fParallel)
-                            cs_main.lock();
-                        else
-                            cs_xval.unlock();
+                        if (fParallel) cs_main.lock();
                         return error("ConnectBlock(): CheckInputs on %s failed with %s", 
                                               tx.GetHash().ToString(), FormatStateMessage(state));
                     }
@@ -2701,7 +2698,6 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
         boost::this_thread::interruption_point();
     }
-    if (!fParallel) cs_xval.unlock();
     LogPrint("thin", "Number of CheckInputs() performed: %d  Orphan count: %d\n", nChecked, nOrphansChecked);
 
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
