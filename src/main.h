@@ -446,6 +446,7 @@ private:
             CCheckQueue<CScriptCheck>* scriptcheckqueue;
             bool InUse;
             boost::shared_ptr<boost::mutex> scriptcheck_mutex;
+            CCheckQueueControl<CScriptCheck>* control;
 
             CScriptCheckQueue(CCheckQueue<CScriptCheck>* pqueueIn) : InUse(false), scriptcheck_mutex(new boost::mutex)
             {
@@ -478,6 +479,16 @@ public:
             }
         }
         return  NULL;
+    }
+
+    // Add a new queue control associated with it's mutex
+    void AddControl(boost::shared_ptr<boost::mutex> mutex, CCheckQueueControl<CScriptCheck>* pControl)
+    {
+        for (unsigned int i = 0; i < vScriptCheckQueues.size(); i++) {
+            if (vScriptCheckQueues[i].scriptcheck_mutex == mutex) {
+                vScriptCheckQueues[i].control = pControl;
+            }
+        }
     }
 
     boost::shared_ptr<boost::mutex> GetScriptCheckMutex()

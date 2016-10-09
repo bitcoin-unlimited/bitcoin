@@ -2572,9 +2572,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     // Create a temporary view of the UTXO set
     CCoinsViewCache viewTempCache(pcoinsTip);
 
-    // Section for boost scoped lock
+    // Section for boost scoped lock on the scriptcheck_mutex
     {
-    //CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : NULL);
 
     // Get the next available mutex and then use it to find the associated scriptcheckqueue. Then lock this thread
     // with the mutex so other thread can used this scriptcheckqueue until all inputs have been checked and the 
@@ -2582,12 +2581,22 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     boost::shared_ptr<boost::mutex> scriptcheck_mutex = allScriptCheckQueues.GetScriptCheckMutex();
     if (fParallel) cs_main.unlock(); // unlock cs_main, we may be waiting here for a while before aquiring the scoped lock below
     boost::mutex::scoped_lock lock(*scriptcheck_mutex);
+
+    // Get the next available scriptcheckqueue.
     CCheckQueue<CScriptCheck>* scriptQueue = allScriptCheckQueues.GetScriptCheckQueue(scriptcheck_mutex);
     assert(scriptQueue != NULL);
-    CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? scriptQueue : NULL);
-    if (fParallel) cs_main.lock(); // re-aquire lock
 
+    // Now that we have a scriptqueue we can create our control and then add it to the tracking vector so we can 
+    // call Quit() on it later.
+    //CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : NULL);
+    CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? scriptQueue : NULL);
+    //allScriptCheckQueues.AddControl(scriptcheck_mutex, &control);
+
+    // Re-aquire cs_main if necessary and also lock cs_xval if necessary
+    if (fParallel) cs_main.lock();
     if (!fParallel) cs_xval.lock();
+
+    // Start checking Inputs
     for (unsigned int i = 0; i < block.vtx.size(); i++)
     {
         const CTransaction &tx = block.vtx[i];
@@ -2750,8 +2759,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 // Terminate threads:  if it is in the map threadgroup, and is not this thread, and the block hash matches
                 //                the same block hash being used in this thread.
                 if ((*mi).first != this_id && (*mi).second.hash == block.GetHash()) {
-                    mapBlockValidationThreads.erase((*mi).first);
                     (*mi).second.tRef->interrupt(); // kill the thread
+                    mapBlockValidationThreads.erase((*mi).first);
                     LogPrint("parallel", "killing a thread with blockhash %s and previous blockhash %s\n", 
                                           block.GetHash().ToString(), block.GetBlockHeader().hashPrevBlock.ToString());
                 }         

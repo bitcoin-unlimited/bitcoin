@@ -1471,8 +1471,8 @@ void HandleBlockMessage(CNode *pfrom, const string &strCommand, CBlock &block, c
                         return; // block is rejected
                     }
                     else { // interrupt chosen thread
-                       mapBlockValidationThreads.erase((*miLargestBlock).first);
                        (*miLargestBlock).second.tRef->interrupt(); // kill the thread
+                       mapBlockValidationThreads.erase((*miLargestBlock).first);
                        LogPrint("parallel", "Too many blocks being validated, killing a thread with blockhash %s and previous blockhash %s\n", 
                                (*miLargestBlock).second.hash.ToString(), (*miLargestBlock).second.hashPrevBlock.ToString());
                     }

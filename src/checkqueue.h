@@ -143,6 +143,12 @@ public:
         return Loop(true);
     }
 
+    //! Quit execution of any remaining checks.
+    void Quit()
+    {
+        fQuit = true;
+    }
+
     //! Add a batch of checks to the queue
     void Add(std::vector<T>& vChecks)
     {
