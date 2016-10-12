@@ -106,7 +106,7 @@ static unsigned int MAX_BLOCKS_IN_TRANSIT_PER_PEER = 1;
 static unsigned int BLOCK_DOWNLOAD_WINDOW = 8;
 
 /** thread group map for parallel block validation */
-map<boost::thread::id, CHandleBlockMsgThreads> mapBlockValidationThreads; // locked by cs_blockvalidationthread
+map<boost::thread::id, CHandleBlockMsgThreads> mapBlockValidationThreads GUARDED_BY(cs_blockvalidationthread);
 CCriticalSection cs_blockvalidationthread;
 
 /** BU: end **/
@@ -2583,14 +2583,21 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     boost::mutex::scoped_lock lock(*scriptcheck_mutex);
 
     // Get the next available scriptcheckqueue.
-    CCheckQueue<CScriptCheck>* scriptQueue = allScriptCheckQueues.GetScriptCheckQueue(scriptcheck_mutex);
-    assert(scriptQueue != NULL);
+    CCheckQueue<CScriptCheck>* pScriptQueue = allScriptCheckQueues.GetScriptCheckQueue(scriptcheck_mutex);
+    assert(pScriptQueue != NULL);
 
-    // Now that we have a scriptqueue we can create our control and then add it to the tracking vector so we can 
-    // call Quit() on it later.
     //CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : NULL);
-    CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? scriptQueue : NULL);
-    //allScriptCheckQueues.AddControl(scriptcheck_mutex, &control);
+    CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? pScriptQueue : NULL);
+    boost::thread::id this_id(boost::this_thread::get_id());
+    {
+    LOCK(cs_blockvalidationthread);
+    // We need to place an interruption point here because we do not want to assign a script queue to a thread of activity
+    // if another thread has just won the race and has sent an interrupt and already deleted the map element.
+    boost::this_thread::interruption_point();
+
+    // Now that we have a scriptqueue we can add it to the tracking map so we can call Quit() on it later if needed.
+    mapBlockValidationThreads[this_id].pScriptQueue = pScriptQueue;
+    }
 
     // Re-aquire cs_main if necessary 
     if (fParallel) cs_main.lock();
@@ -2663,8 +2670,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 {
                     // ** if in parallel mode then unlock cs_main for a short while to give any other threads
                     // a chance to process in parallel. This is crucial for parallel validation to work. 
-                    // NOTE: CheckInputs does not have to be locked as it has it's own
-                    // internal locking mechanism with shared locks for reading, and unique locks for writing.
+                    // NOTE: CheckInputs() does not have to be locked with cs_main as it has it's own UTXO view to work 
+                    // with and the scriptcheckqueue's have their own internal locking mechanism.
                     if (fParallel) cs_main.unlock();
 
                     LogPrint("parallel_2", "checking inputs for tx: %d\n", i);
@@ -2715,12 +2722,12 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         if (fParallel) cs_main.lock();
         return state.DoS(100, false);
     }
+    boost::this_thread::interruption_point();
     if (fParallel) cs_main.lock();
 
     if (fJustCheck)
         return true;
 
-    boost::this_thread::interruption_point();
 
     } // end section for scoped lock
 
@@ -2742,23 +2749,36 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
     {
         LOCK(cs_blockvalidationthread);
-        // terminate all other threads that match our blockhash, and cleanup map before updating the tip.  This is in the case where we're doing IBD and
-        // we receive two of the same blocks, one a re-request.  Also, this handles an attack vector where someone blasts us
-        // with many of the same block.
+        // terminate all other threads that match our previous blockhash, and cleanup map before updating the tip.  
+        // This is in the case where we're doing IBD and we receive two of the same blocks, one a re-request.  
+        // Also, this handles an attack vector where someone blasts us with many of the same block.
         if (mapBlockValidationThreads.size() > 1)
         {
             boost::thread::id this_id(boost::this_thread::get_id()); // get this thread's id
+
             map<boost::thread::id, CHandleBlockMsgThreads>::iterator iter = mapBlockValidationThreads.begin();
             while (iter != mapBlockValidationThreads.end())
             {
-                map<boost::thread::id, CHandleBlockMsgThreads>::iterator mi = iter++; // increment to avoid iterator becoming invalid
-                // Terminate threads:  if it is in the map threadgroup, and is not this thread, and the block hash matches
-                //                the same block hash being used in this thread.
-                if ((*mi).first != this_id && (*mi).second.hash == block.GetHash()) {
-                    (*mi).second.tRef->interrupt(); // kill the thread
+                map<boost::thread::id, CHandleBlockMsgThreads>::iterator mi = iter++; // increment to avoid iterator becoming 
+                // Interrupt threads:  We want to stop any threads that have lost the validation race. We have to compare
+                //                     at the previous block hashes to make the determination.  If they match then it must
+                //                     be a parallel block validation that was happening.
+                if ((*mi).first != this_id && (*mi).second.hashPrevBlock == block.GetBlockHeader().hashPrevBlock) {
+                    if ((*mi).second.pScriptQueue != NULL) {
+                        LogPrint("parallel", "Terminating script queue with blockhash %s and previous blockhash %s\n", 
+                                  (*mi).second.hash.ToString(), block.GetBlockHeader().hashPrevBlock.ToString());
+                         // Send Quit to any other scriptcheckques that were running a parallel validation for the same block.
+                        // NOTE: the scriptcheckqueue may or may not have finished, but sending a quit here ensures
+                        // that it breaks from its processing loop in the event that it is still at the control.Wait() step.
+                        // This allows us to end any long running block validations and allow a smaller block to begin 
+                        // processing when/if all the queues have been jammed by large blocks during an attack.
+                        LogPrint("parallel", "Sending Quit() to scriptcheckqueue\n");
+                        (*mi).second.pScriptQueue->Quit();
+                    }
+                    (*mi).second.tRef->interrupt(); // interrupt the thread
                     mapBlockValidationThreads.erase((*mi).first);
-                    LogPrint("parallel", "killing a thread with blockhash %s and previous blockhash %s\n", 
-                                          block.GetHash().ToString(), block.GetBlockHeader().hashPrevBlock.ToString());
+                    LogPrint("parallel", "interrupting a thread with blockhash %s and previous blockhash %s\n", 
+                              (*mi).second.hash.ToString(), block.GetBlockHeader().hashPrevBlock.ToString());
                 }         
             }
         }

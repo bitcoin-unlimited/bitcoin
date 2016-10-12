@@ -60,6 +60,9 @@ private:
      */
     unsigned int nTodo;
 
+    //! Mutex to protect fQuit
+    boost::mutex mutex_fQuit;
+
     //! Whether we're shutting down.
     bool fQuit;
 
@@ -80,26 +83,44 @@ private:
                 // first do the clean-up of the previous loop run (allowing us to do it in the same critsect)
                 if (nNow) {
                     fAllOk &= fOk;
-                    nTodo -= nNow;
-                    if (nTodo == 0 && !fMaster)
+                    if (nTodo >= nNow)
+                        nTodo -= nNow;
+                    LogPrint("parallel", "Entering cleanup and return: nTodo %d nNow %d\n", nTodo, nNow);
+                    if (nTodo == 0 && !fMaster) {
                         // We processed the last element; inform the master it can exit and return the result
+                        queue.clear();
                         condMaster.notify_one();
+                    }
+                    boost::mutex::scoped_lock lock(mutex_fQuit);
+                    if (fQuit && !fMaster) {
+                        nTodo = 0;
+                        queue.clear();
+                        condMaster.notify_one();
+                        LogPrint("parallel", "Entering QUIT for worker thread: fOK is %d fAllOk is %d\n", fOk, fAllOk);
+                        LogPrint("parallel", "Entering QUIT for worker thread: queue size %d vcheck size %d nTodo %d nNow %d\n",
+                                              queue.size(), vChecks.size(), nTodo, nNow);
+                    }
                 } else {
                     // first iteration
                     nTotal++;
                 }
                 // logically, the do loop starts here
                 while (queue.empty()) {
-                    if ((fMaster || fQuit) && nTodo == 0) {
+                    //if ((fMaster || fQuit) && nTodo == 0) {
+                    if ((fMaster) && nTodo == 0) {
                         nTotal--;
                         bool fRet = fAllOk;
                         // reset the status for new work later
                         if (fMaster)
                             fAllOk = true;
                         // return the current status
+                        boost::mutex::scoped_lock lock(mutex_fQuit);
+                        fQuit = false; // reset the flag before returning
+                        LogPrint("parallel", "returning from master fQuit is: %d fRet is %d\n", fQuit, fRet);
                         return fRet;
                     }
                     nIdle++;
+                    LogPrint("parallel", "conditional wait nIdle %d\n", nIdle);
                     cond.wait(lock); // wait
                     nIdle--;
                 }
@@ -146,7 +167,9 @@ public:
     //! Quit execution of any remaining checks.
     void Quit()
     {
-        fQuit = true;
+       boost::mutex::scoped_lock lock(mutex_fQuit);
+       fQuit = true;
+       LogPrint("parallel", "setting fQuit to: %d\n", fQuit);
     }
 
     //! Add a batch of checks to the queue
@@ -211,7 +234,9 @@ public:
 
     bool Wait()
     {
-        if (pqueue == NULL)
+        if (fDone)
+            return true;
+        else if (pqueue == NULL)
             return true;
         bool fRet = pqueue->Wait();
         fDone = true;

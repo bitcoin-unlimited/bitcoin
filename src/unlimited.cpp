@@ -1467,13 +1467,15 @@ void HandleBlockMessage(CNode *pfrom, const string &strCommand, CBlock &block, c
 
                     // if your block is the biggest or of equal size to the biggest then reject it.
                     if (nLargestBlockSize <= nBlockSize) {
-                        LogPrint("parallel", "Block rejected - Too many blocks currently being validated: %s\n", block.GetHash().ToString());
+                        LogPrint("parallel", "Block validation terminated - Too many blocks currently being validated: %s\n", block.GetHash().ToString());
                         return; // block is rejected
                     }
-                    else { // interrupt chosen thread
-                       (*miLargestBlock).second.tRef->interrupt(); // kill the thread
-                       mapBlockValidationThreads.erase((*miLargestBlock).first);
-                       LogPrint("parallel", "Too many blocks being validated, killing a thread with blockhash %s and previous blockhash %s\n", 
+                    else { // interrupt the chosen thread
+                        LogPrint("parallel", "Sending Quit() to scriptcheckqueue\n");
+                        (*miLargestBlock).second.pScriptQueue->Quit(); // terminate the script queue threads
+                        (*miLargestBlock).second.tRef->interrupt(); // interrupt the thread
+                        mapBlockValidationThreads.erase((*miLargestBlock).first);
+                        LogPrint("parallel", "Too many blocks being validated, interrupting thread with blockhash %s and previous blockhash %s\n", 
                                (*miLargestBlock).second.hash.ToString(), (*miLargestBlock).second.hashPrevBlock.ToString());
                     }
                 }
@@ -1492,18 +1494,20 @@ void HandleBlockMessage(CNode *pfrom, const string &strCommand, CBlock &block, c
         fSemNewBlocks = false;
     }
 
-    boost::thread * tHandleBlockMessage = new boost::thread(boost::bind(&HandleBlockMessageThread, pfrom, strCommand, block, inv, fSemNewBlocks));
+    boost::thread * thread = new boost::thread(boost::bind(&HandleBlockMessageThread, pfrom, strCommand, block, inv, fSemNewBlocks));
     {
+LogPrintf("creating thread with id %d\n",thread->get_id());
         LOCK(cs_blockvalidationthread);
-        mapBlockValidationThreads[tHandleBlockMessage->get_id()].tRef = tHandleBlockMessage;
-        mapBlockValidationThreads[tHandleBlockMessage->get_id()].hash = inv.hash;
-        mapBlockValidationThreads[tHandleBlockMessage->get_id()].hashPrevBlock = block.GetBlockHeader().hashPrevBlock;
-        mapBlockValidationThreads[tHandleBlockMessage->get_id()].nStartTime = GetTimeMillis();
-        mapBlockValidationThreads[tHandleBlockMessage->get_id()].nBlockSize = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
+        mapBlockValidationThreads[thread->get_id()].tRef = thread;
+        mapBlockValidationThreads[thread->get_id()].pScriptQueue = NULL;
+        mapBlockValidationThreads[thread->get_id()].hash = inv.hash;
+        mapBlockValidationThreads[thread->get_id()].hashPrevBlock = block.GetBlockHeader().hashPrevBlock;
+        mapBlockValidationThreads[thread->get_id()].nStartTime = GetTimeMillis();
+        mapBlockValidationThreads[thread->get_id()].nBlockSize = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
         LogPrint("parallel", "Launching validation for %s with number of block validation threads running: %d\n", 
                               block.GetHash().ToString(), mapBlockValidationThreads.size());
 
-        tHandleBlockMessage->detach();
+        thread->detach();
    }
 }
 void HandleBlockMessageThread(CNode *pfrom, const string &strCommand, CBlock &block, const CInv &inv, bool fSem)
@@ -1587,14 +1591,15 @@ void HandleBlockMessageThread(CNode *pfrom, const string &strCommand, CBlock &bl
             EraseOrphanTx(block.vtx[i].GetHash());
     }
     
-    // cleanup thread data structures - this must be done before the thread completes
+    // Cleanup thread data - this must be done before the thread completes or else some other new
+    // thread may grab the same thread id and we would end up deleting the entry for the new thread instead.
     {
         LOCK(cs_blockvalidationthread);
         boost::thread::id this_id(boost::this_thread::get_id()); 
         if (mapBlockValidationThreads.count(this_id))
             mapBlockValidationThreads.erase(this_id);
     }
-
+ 
     // release semaphores depending on whether this was IBD or not.  We can not use IsChainNearlySyncd()
     // because the return value will switch over when IBD is nearly finished and we may end up not releasing
     // the correct semaphore.
