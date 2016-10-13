@@ -85,7 +85,7 @@ private:
                     fAllOk &= fOk;
                     if (nTodo >= nNow)
                         nTodo -= nNow;
-                    LogPrint("parallel", "Entering cleanup and return: nTodo %d nNow %d\n", nTodo, nNow);
+                    LogPrint("parallel_2", "Entering cleanup and return: nTodo %d nNow %d\n", nTodo, nNow);
                     if (nTodo == 0 && !fMaster) {
                         // We processed the last element; inform the master it can exit and return the result
                         queue.clear();
@@ -96,8 +96,8 @@ private:
                         nTodo = 0;
                         queue.clear();
                         condMaster.notify_one();
-                        LogPrint("parallel", "Entering QUIT for worker thread: fOK is %d fAllOk is %d\n", fOk, fAllOk);
-                        LogPrint("parallel", "Entering QUIT for worker thread: queue size %d vcheck size %d nTodo %d nNow %d\n",
+                        LogPrint("parallel_2", "Entering QUIT for worker thread: fOK is %d fAllOk is %d\n", fOk, fAllOk);
+                        LogPrint("parallel_2", "Entering QUIT for worker thread: queue size %d vcheck size %d nTodo %d nNow %d\n",
                                               queue.size(), vChecks.size(), nTodo, nNow);
                     }
                 } else {
@@ -116,11 +116,11 @@ private:
                         // return the current status
                         boost::mutex::scoped_lock lock(mutex_fQuit);
                         fQuit = false; // reset the flag before returning
-                        LogPrint("parallel", "returning from master fQuit is: %d fRet is %d\n", fQuit, fRet);
+                        LogPrint("parallel_2", "returning from master fQuit is: %d fRet is %d\n", fQuit, fRet);
                         return fRet;
                     }
                     nIdle++;
-                    LogPrint("parallel", "conditional wait nIdle %d\n", nIdle);
+                    LogPrint("parallel_2", "conditional wait nIdle %d\n", nIdle);
                     cond.wait(lock); // wait
                     nIdle--;
                 }
@@ -169,7 +169,7 @@ public:
     {
        boost::mutex::scoped_lock lock(mutex_fQuit);
        fQuit = true;
-       LogPrint("parallel", "setting fQuit to: %d\n", fQuit);
+       LogPrint("parallel_2", "setting fQuit to: %d\n", fQuit);
     }
 
     //! Add a batch of checks to the queue
