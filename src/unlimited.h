@@ -11,6 +11,7 @@
 #include "net.h"
 #include "stat.h"
 #include "thinblock.h"
+#include "chain.h"
 #include "coins.h"
 #include "consensus/validation.h"
 #include "consensus/params.h"
@@ -172,8 +173,8 @@ extern bool IsChainNearlySyncd();
 extern void IsChainNearlySyncdInit();
 extern void BuildSeededBloomFilter(CBloomFilter& memPoolFilter, std::vector<uint256>& vOrphanHashes, uint256 hash);
 extern void LoadFilter(CNode *pfrom, CBloomFilter *filter);
-extern void HandleBlockMessage(CNode *pfrom, const std::string &strCommand, CBlock &block, const CInv &inv);
-extern void HandleBlockMessageThread(CNode *pfrom, const std::string &strCommand, CBlock &block, const CInv &inv, bool fSem);
+extern void HandleBlockMessage(CNode *pfrom, const std::string &strCommand, const CBlock &block, const CInv &inv);
+extern void HandleBlockMessageThread(CNode *pfrom, const std::string &strCommand, const CBlock &block, const CInv &inv, bool fSem);
 extern void ConnectToThinBlockNodes();
 extern void CheckNodeSupportForThinBlocks();
 extern void SendXThinBlock(CBlock &block, CNode* pfrom, const CInv &inv);
@@ -216,6 +217,7 @@ struct CHandleBlockMsgThreads {
     CCheckQueue<CScriptCheck>* pScriptQueue;
     uint256 hash;
     uint256 hashPrevBlock;
+    uint32_t nSequenceId;
     int64_t nStartTime;
     uint64_t nBlockSize;
 };

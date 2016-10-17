@@ -1421,7 +1421,7 @@ void LoadFilter(CNode *pfrom, CBloomFilter *filter)
 
 //  HandleBlockMessage launches a HandleBlockMessageThread.  And HandleBlockMessageThread processes each block and updates 
 //  the UTXO if the block has been accepted and the tip updated. We cleanup and release the semaphore after the thread has finished.
-void HandleBlockMessage(CNode *pfrom, const string &strCommand, CBlock &block, const CInv &inv)
+void HandleBlockMessage(CNode *pfrom, const string &strCommand, const CBlock &block, const CInv &inv)
 {
     uint64_t nBlockSize = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
 
@@ -1496,12 +1496,29 @@ void HandleBlockMessage(CNode *pfrom, const string &strCommand, CBlock &block, c
 
     boost::thread * thread = new boost::thread(boost::bind(&HandleBlockMessageThread, pfrom, strCommand, block, inv, fSemNewBlocks));
     {
-LogPrintf("creating thread with id %d\n",thread->get_id());
+//        uint32_t nSequenceId = 0;
+//        BlockMap::iterator mi = mapBlockIndex.find(inv.hash);
+//        if (mi != mapBlockIndex.end())
+//            nSequenceId = mi->second->nSequenceId;
+
+//        else 
+//        {
+//            std::set<CBlockIndex*, CBlockIndexWorkComparator> setBlockIndexCandidates::reverse_iterator it = setBlockIndexCandidates.rbegin();
+//            while (it != setBlockIndexCandidates.rend())
+//            {
+//                if ((*it)->phashBlock == inv.hash)
+//                    nSequenceId = (*it)->nSequenceId;
+//                it++;
+//            }
+//        }
+//        assert(nSequenceId > 0);
+
         LOCK(cs_blockvalidationthread);
         mapBlockValidationThreads[thread->get_id()].tRef = thread;
         mapBlockValidationThreads[thread->get_id()].pScriptQueue = NULL;
         mapBlockValidationThreads[thread->get_id()].hash = inv.hash;
         mapBlockValidationThreads[thread->get_id()].hashPrevBlock = block.GetBlockHeader().hashPrevBlock;
+        mapBlockValidationThreads[thread->get_id()].nSequenceId = 0;
         mapBlockValidationThreads[thread->get_id()].nStartTime = GetTimeMillis();
         mapBlockValidationThreads[thread->get_id()].nBlockSize = ::GetSerializeSize(block, SER_NETWORK, PROTOCOL_VERSION);
         LogPrint("parallel", "Launching validation for %s with number of block validation threads running: %d\n", 
@@ -1510,7 +1527,7 @@ LogPrintf("creating thread with id %d\n",thread->get_id());
         thread->detach();
    }
 }
-void HandleBlockMessageThread(CNode *pfrom, const string &strCommand, CBlock &block, const CInv &inv, bool fSem)
+void HandleBlockMessageThread(CNode *pfrom, const string &strCommand, const CBlock &block, const CInv &inv, bool fSem)
 {
     bool fParallel = true;
     int64_t startTime = GetTimeMicros();

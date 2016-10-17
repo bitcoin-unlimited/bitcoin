@@ -16,12 +16,14 @@ class ParallelTest (BitcoinTestFramework):
 
     def setup_network(self, split=False):
         self.nodes = []
-        self.nodes.append(start_node(0, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
-        self.nodes.append(start_node(1, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
-        self.nodes.append(start_node(2, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(0, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(1, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(2, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(3, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
         connect_nodes_bi(self.nodes,0,1)
         connect_nodes_bi(self.nodes,1,2)
         connect_nodes_bi(self.nodes,0,2)
+        connect_nodes_bi(self.nodes,1,3)
         self.is_network_split=False
         self.sync_all()
 
@@ -45,9 +47,10 @@ class ParallelTest (BitcoinTestFramework):
         wait_bitcoinds()
 
         self.nodes = []
-        self.nodes.append(start_node(0, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
-        self.nodes.append(start_node(1, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
-        self.nodes.append(start_node(2, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(0, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(1, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(2, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(3, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
 
         # Create many utxo's
         print "Generating txns..."
@@ -104,6 +107,7 @@ class ParallelTest (BitcoinTestFramework):
         connect_nodes_bi(self.nodes,0,1)
         connect_nodes_bi(self.nodes,1,2)
         connect_nodes_bi(self.nodes,0,2)
+        connect_nodes_bi(self.nodes,1,3)
         self.is_network_split=False
         self.sync_all()
 
@@ -112,9 +116,10 @@ class ParallelTest (BitcoinTestFramework):
         wait_bitcoinds()
 
         self.nodes = []
-        self.nodes.append(start_node(0, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
-        self.nodes.append(start_node(1, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
-        self.nodes.append(start_node(2, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(0, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(1, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(2, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(3, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
 
         # Send more transactions
         print "Generating more txns..."
@@ -148,6 +153,7 @@ class ParallelTest (BitcoinTestFramework):
         self.nodes[0].generate(1)
         connect_nodes(self.nodes[0],1)
         connect_nodes(self.nodes[1],2)
+        connect_nodes(self.nodes[1],3)
         self.sync_all()
 
 
@@ -156,9 +162,10 @@ class ParallelTest (BitcoinTestFramework):
         wait_bitcoinds()
 
         self.nodes = []
-        self.nodes.append(start_node(0, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
-        self.nodes.append(start_node(1, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
-        self.nodes.append(start_node(2, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(0, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(1, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(2, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
+        self.nodes.append(start_node(3, self.options.tmpdir, ["-debug", "-use-thinblocks=0", "-excessiveblocksize=6000000", "-blockprioritysize=6000000", "-blockmaxsize=6000000"]))
 
 
         # create transactions with many inputs
@@ -206,7 +213,7 @@ class ParallelTest (BitcoinTestFramework):
         self.nodes[2].generate(1)
         connect_nodes(self.nodes[0],1)
         connect_nodes(self.nodes[1],2)
-        self.sync_all()
+        sync_blocks(self.nodes[0:2])
 
 
         # node0 has the bigger block and was sent and began processing first, however the block from node2
@@ -215,6 +222,19 @@ class ParallelTest (BitcoinTestFramework):
         time.sleep(15) # wait here to make sure a re-org does not happen on node0 so we want to give it some time.
         assert_equal(self.nodes[1].getbestblockhash(), self.nodes[2].getbestblockhash())
         assert_not_equal(self.nodes[0].getbestblockhash(), self.nodes[1].getbestblockhash())
+
+
+        # mine a block on node3 and then connect to the others.  This tests when a third block arrives after
+        # the tip has been advanced.
+        # this block should propagate to the other nodes but not cause a re-org
+        self.nodes[3].generate(1)
+        connect_nodes(self.nodes[1],3)
+        sync_blocks(self.nodes)
+
+        time.sleep(15) # wait here to make sure a re-org does not happen on node0 so we want to give it some time.
+        assert_equal(self.nodes[1].getbestblockhash(), self.nodes[2].getbestblockhash())
+        assert_not_equal(self.nodes[0].getbestblockhash(), self.nodes[1].getbestblockhash())
+        assert_not_equal(self.nodes[1].getbestblockhash(), self.nodes[3].getbestblockhash())
 
 
         # Send some transactions and Mine a block on node 2.  
