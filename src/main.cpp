@@ -3356,6 +3356,12 @@ LogPrintf("disconnecting tip %s work %s with pindexfork is %s seqid %d\n", pinde
     // Build list of new blocks to connect.
     std::vector<CBlockIndex*> vpindexToConnect;
     bool fContinue = true;
+    /** Parallel Validation: fBlock determines whether we pass a block or NULL to ConnectTip().
+     *  If the pindexMostWork has been extended while we have been validating the last block then we
+     *  want to pass a NULL so that the next block is read from disk, because we will definitely not 
+     *  have the block. 
+     */
+    bool fBlock = true;
     int nHeight = pindexFork ? pindexFork->nHeight : -1;
     while (fContinue && nHeight != pindexMostWork->nHeight) {
         // Don't iterate the entire list of potential improvements toward the best tip, as we likely only need
@@ -3372,7 +3378,7 @@ LogPrintf("disconnecting tip %s work %s with pindexfork is %s seqid %d\n", pinde
 
         // Connect new blocks.
         BOOST_REVERSE_FOREACH(CBlockIndex *pindexConnect, vpindexToConnect) {
-            if (!ConnectTip(state, chainparams, pindexConnect, pindexConnect == pindexMostWork? pblock : NULL, fParallel)) {
+            if (!ConnectTip(state, chainparams, pindexConnect, pindexConnect == pindexMostWork && fBlock? pblock : NULL, fParallel)) {
                 if (state.IsInvalid()) {
                     // The block violates a consensus rule.
                     if (!state.CorruptionPossible())
@@ -3388,11 +3394,18 @@ LogPrintf("disconnecting tip %s work %s with pindexfork is %s seqid %d\n", pinde
             } else {
                 PruneBlockIndexCandidates();
                 if (!pindexOldTip || chainActive.Tip()->nChainWork > pindexOldTip->nChainWork) {
+                    /* BU: these are commented out for parallel validation: 
+                           We must always continue so as to find if the pindexMostWork has advanced while we've
+                           been trying to connect the last block.
+                    // We're in a better position than we were. Return temporarily to release the lock.
                     fContinue = false;
                     break;
+                    */
                 }
             }
         }
+        if (fContinue) pindexMostWork = FindMostWorkChain();
+        fBlock = false; //read next blocks from disk
     }
     if (fBlocksDisconnected) {
         mempool.removeForReorg(pcoinsTip, chainActive.Tip()->nHeight + 1, STANDARD_LOCKTIME_VERIFY_FLAGS);
