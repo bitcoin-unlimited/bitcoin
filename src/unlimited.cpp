@@ -79,8 +79,6 @@ CSemaphore*  semOutboundAddNode = NULL; // BU: separate semaphore for -addnodes
 CNodeSignals g_signals __attribute__((init_priority(109)));
 CNetCleanup cnet_instance_cleanup __attribute__((init_priority(110)));  // Must construct after statistics, because CNodes use statistics.  In particular, seg fault on osx during exit because constructor/destructor order is not guaranteed between modules in clang.
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 std::string ExcessiveBlockValidator(const unsigned int& value,unsigned int* item,bool validate)
 {
   if (validate)

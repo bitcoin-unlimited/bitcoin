@@ -5,15 +5,19 @@ Parallel Block Validation
 1. What is Parallel Block Validation?
 -------------------------------------
 
-Essentially Parallel Validation is a simple concept. Rather than validating each block in the main processing thread, we
-instead create a separate thread and do the processing.  If more than one block arrives to be processed then
+Essentially Parallel Validation is a simple concept. Rather than validating each block within the main processing thread, we
+instead create a separate thread to do the block validation.  If more than one block arrives to be processed then
 we create yet another thread.  There are currently up to 4 parallel block processing threads available making a big block DDOS
 attack impossible.  Furthermore, if any attacker were somehow able to jam all 4 processing threads and another block
-arrived, then the processing for the largest block would be interrupted allowing the smaller block to proceed.
+arrived, then the processing for the largest block would be interrupted allowing the smaller block to proceed, unless the larger
+block or blocks have most proof of work.  So only the most proof of work and smallest blocks will be allowed to finish in such
+as case.
 
 If there are multiple blocks processing at the same time, when one of the blocks wins the race to complete, then the other
 threads of processing are interrupted and the winner will be able to update the UTXO and advance the chain tip.  Although the 
-other blocks that were interrupted will still be stored on disk in the event of a re-org.
+other blocks that were interrupted will still be stored on disk in the event of a re-org. The blocks that are allowed to finish
+or are interrupted depend again on the rules of which block has the most proof of work.  See section: `Special Cases and possible attacks`
+for a more detailed understanding of this potential problem.
 
 
 2. The internals
@@ -37,7 +41,7 @@ their own internal locking mechanism. Furthermore when it comes time to wait for
 maintain the `cs_main` locks during the `control.Wait()`. 
 
 Although this unlocking and locking of `cs_main` causes some overhead it is not invoked during the mining process but only when we 
-receive a new block from an external source that needs validation.  It is designed primarily to prevent the big block DDOS attack from 
+receive a new block from an external source which needs validation.  It is designed primarily to prevent the big block DDOS attack from 
 jamming the main processing thread.
 
 2d) Interrupts:  If multiple blocks are competing to win the validation race or if all 4 script queues are in use and another new block 
@@ -46,21 +50,21 @@ the script threads which prevents them from completing their verification, follo
 block has finished and has advanced the tip, the other concurrent threads will see that the tip has advanced and will exit their validation 
 threads.
 
-
 2e) Temp view cache:  Each processing thread has it's own temporary view of the UTXO which it can used to pre-validate the inputs and ensure 
 that the block is valid (as each input is checked the UTXO must be updated before the next input can be checked because many times the 
 current input depends on some previous input in the same block). When and If a processing thread wins the validation race it will flush it's 
 temporary and now updated view of the UTXO to the base view which then updates the UTXO on disk.  This is key to having several threads of 
 validation running concurrently, since we can not have multiple threads all updating the same UTXO base view at the same time.
 
-2f) nSequenceId: In order to have the correct `pindexMostWork` we must update the nSequenceId an additional time after the
-winning block updates the UTXO and advances the chain tip. We can not only rely on the proof of work in the header or when the block 
-initially arrived as was previously the case.  That is because pindexMostWork may not necessarily point to the winning block based on the 
-old criteria.  So what we do is swap the nSequenceId between the winning and losing blocks such that the winning block has the lowest nSequenceId.
+2f) nSequenceId: In order to have the correct `pindexMostWork` we must update the `nSequenceId` an additional time after the
+winning block updates the `UTXO` and advances the chain tip. We can not only rely only on the `pindexMostWork` returned from the `CBlockIndexWorkComparator()`
+as was previously the case.  That is because pindexMostWork returned from the comparator may not necessarily point to the winning block.  
+So what we have to do is swap the `nSequenceId` between the winning and losing blocks such that the winning block has the lowest nSequenceId and 
+the losing blocks nSequenceId's are bumped up one while at the same time keeping their relative ordering.
 
 
 3. IBD and new blocks
-----------------------
+---------------------- 
 
 Parallel Validation is only in effect when new blocks arrive.  In other words, the `fIsChainNearlySyncd` flag must be true
 indicating that IBD has been completed.
@@ -77,13 +81,19 @@ Mining is not affected by Parallel Validation.  When new blocks are created loca
 are not unlocked and then locked repeatedly, allowing the validation process to be completed as quickly as possible.  Whether parallel validation
 is invoked or not depends on the boolean `fParallel`.  When set to `true` then parallel validation is in effect, and when `false` , as in the case
 of generating a new block, then it is turned off.
-NOTE: Miners will still use parallel validation if a block arrives from an external source. It is only turned off when validating a block they mine themself.
+NOTE: Miners will still use parallel validation if a block arrives from an external source. It is only turned off when validating a block they
+mine themself.
 
 
 5. Special Cases and possible attacks
 -------------------------------------
 
-We have to account for the possiblity that someone may craft a lower proof of work block at the same time as a higher one. If the lower POW block were to win the validation race then we may end up mining on top of that block and therefore end up mining the wrong chain. To get around that, when there are two blocks validating at the same time and if the POW doesn't match and the lower POW block wins the race, then we have to wait for the other block to finish before advancing the tip. In this situation if the higher POW block finishes second but without errors then we it will be the one that advances the tip and the lower POW block will get orphaned.  But in general the first block to finish will advance the tip and then terminate any competing threads. 
+We have to account for the possiblity that someone may create a lower proof of work block at the same time as a higher one is mined. If the lower POW block 
+were to win the validation race then we may end up mining on top of that block and therefore end up mining the wrong chain. To get around that, 
+when there are two blocks validating at the same time and if the POW doesn't match and the lower POW block wins the race, then we have to wait 
+for the other block to finish before advancing the tip. In this situation if the higher POW block finishes second but without errors then we it 
+will be the one that advances the tip and the lower POW block will get orphaned.  But in general the first block to finish will advance the tip 
+and then terminate any competing threads. 
 
 Thanks to Justus Ranvier for outlining the above scenario.
 
