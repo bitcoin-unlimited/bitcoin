@@ -205,11 +205,11 @@ class TestManager(object):
                 blockhash in node.block_request_map and node.block_request_map[blockhash]
                 for node in self.test_nodes
             )
-        time.sleep(1)  # The BU xthin preferential thinblock timer will delay sync so we need to wait longer for sync
+        #time.sleep(1)  # The BU xthin preferential thinblock timer will delay sync so we need to wait longer for sync
         # --> error if not requested
         if not wait_until(blocks_requested, attempts=20*num_blocks):
             # print [ c.cb.block_request_map for c in self.connections ]
-            raise AssertionError("Not all nodes requested block")
+            rais#e AssertionError("Not all nodes requested block")
 
         # Send getheaders message
         [ c.cb.send_getheaders() for c in self.connections ]
@@ -269,8 +269,17 @@ class TestManager(object):
                     print("Quick   RPC returns", c.rpc.getbestblockhash())
                     time.sleep(5)
                     print("Delayed RPC returns", c.rpc.getbestblockhash())
-		    # pdb.set_trace()
-                    return False
+
+                    rpcblock = c.rpc.getbestblockhash()
+                    block = hex(blockhash)[2:]
+                    while len(block) < 64:
+                        block = '0' + block
+                    if rpcblock == block:
+                        return True
+                    else:
+                        # pdb.set_trace()
+                        return False
+
             return True
 
     # Either check that the mempools all agree with each other, or that

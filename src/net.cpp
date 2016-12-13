@@ -120,8 +120,7 @@ extern CSemaphore *semOutboundAddNode; // BU: separate semaphore for -addnodes
 boost::condition_variable messageHandlerCondition;
 
 // BU Parallel validation
-CSemaphore *semIBD;       // semaphore for IBD threads
-CSemaphore *semNewBlocks; // semaphore for parallel validation threads
+extern CSemaphore *semPV; // semaphore for parallel validation threads
 
 // BU  Connection Slot mitigation - used to determine how many connection attempts over time
 extern std::map<CNetAddr, ConnectionHistory> mapInboundConnectionTracker;
@@ -908,7 +907,7 @@ private:
     CNode *_pnode;
 };
 
-#if 0 // BU: Not currenly used
+#if 0 // Not currenly used
 static bool ReverseCompareNodeMinPingTime(const CNodeRef &a, const CNodeRef &b)
 {
     return a->nMinPingUsecTime > b->nMinPingUsecTime;
@@ -2334,11 +2333,9 @@ void NetCleanup()
         if (pnodeLocalHost) delete pnodeLocalHost;
         pnodeLocalHost = NULL;
 
-        //BU: clean up the parallel validation semaphores
-        delete semIBD;
-        semIBD = NULL;
-        delete semNewBlocks;
-        semNewBlocks = NULL;
+        //BU: clean up the parallel validation semaphore
+        if (semPV) delete semPV;
+        semPV = NULL;
 
 #ifdef WIN32
         // Shutdown Windows Sockets

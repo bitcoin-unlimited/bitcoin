@@ -102,6 +102,10 @@ CCriticalSection cs_vOneShots;
 
 CCriticalSection cs_statMap;
 
+//semaphore for parallel validation threads
+CCriticalSection cs_semPV;
+CSemaphore *semPV;
+
 deque<string> vOneShots;
 std::map<CNetAddr, ConnectionHistory> mapInboundConnectionTracker;
 vector<std::string> vUseDNSSeeds;
@@ -204,7 +208,6 @@ CTweak<uint64_t> checkScriptDays("blockchain.checkScriptDays","The number of day
 CRequestManager requester;  // after the maps nodes and tweaks
 
 // Parallel Validation Variables
-CCriticalSection cs_blockvalidationthread;
 CParallelValidation PV;  // Singleton class
 CAllScriptCheckQueues allScriptCheckQueues; // Singleton class
 
