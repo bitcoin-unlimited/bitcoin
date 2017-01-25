@@ -3319,15 +3319,13 @@ static bool ActivateBestChainStep(CValidationState& state, const CChainParams& c
             } else {
                 pindexNewTip = pindexConnect;
 
-                // Update the UI after each block is processed if the most work index is less than 
-                // our target height.  This means we are close to finishing IBD and we want the user
-                // to see each block in the UI that gets processed.
-                if (pindexMostWork->nHeight < nHeight)
-                    uiInterface.NotifyBlockTip(true, pindexNewTip);
-
-                // Notify external zmq listeners about the new tip.
-                if (!IsInitialBlockDownload())
+                if (!IsInitialBlockDownload()) {
+                    // Notify external zmq listeners about the new tip.
                     GetMainSignals().UpdatedBlockTip(pindexConnect);
+
+                    // Update the UI after each block if we are close to finishing IBD
+                    uiInterface.NotifyBlockTip(true, pindexNewTip);
+                }
 
                 PruneBlockIndexCandidates();
                 if (!pindexOldTip || chainActive.Tip()->nChainWork > pindexOldTip->nChainWork) {
