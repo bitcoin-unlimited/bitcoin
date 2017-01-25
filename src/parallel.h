@@ -131,7 +131,7 @@ public:
     void Cleanup(const CBlock& block, CBlockIndex* pindex);
 
     /* Send quit to competing threads */
-    void QuitCompetingThreads(const CBlock& block);
+    void QuitCompetingThreads(const uint256& prevBlockHash);
 
     /* Is this block already running a validation thread? */
     bool IsAlreadyValidating(const NodeId id);

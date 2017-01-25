@@ -146,7 +146,7 @@ void CParallelValidation::Cleanup(const CBlock& block, CBlockIndex* pindex)
     }
 }
 
-void CParallelValidation::QuitCompetingThreads(const CBlock& block)
+void CParallelValidation::QuitCompetingThreads(const uint256& prevBlockHash)
 {
     // Kill other competing threads but not this one.
     LOCK(cs_blockvalidationthread);
@@ -160,10 +160,10 @@ void CParallelValidation::QuitCompetingThreads(const CBlock& block)
             // Interrupt threads:  We want to stop any threads that have lost the validation race. We have to compare
             //                     at the previous block hashes to make the determination.  If they match then it must
             //                     be a parallel block validation that was happening.
-            if ((*mi).first != this_id && (*mi).second.hashPrevBlock == block.GetBlockHeader().hashPrevBlock) {
+            if ((*mi).first != this_id && (*mi).second.hashPrevBlock == prevBlockHash) {
                 if ((*mi).second.pScriptQueue != NULL) {
                     LogPrint("parallel", "Terminating script queue with blockhash %s and previous blockhash %s\n", 
-                              (*mi).second.hash.ToString(), block.GetBlockHeader().hashPrevBlock.ToString());
+                              (*mi).second.hash.ToString(), prevBlockHash.ToString());
                     // Send Quit to any other scriptcheckques that were running a parallel validation for the same block.
                     // NOTE: the scriptcheckqueue may or may not have finished, but sending a quit here ensures
                     // that it breaks from its processing loop in the event that it is still at the control.Wait() step.
@@ -174,7 +174,7 @@ void CParallelValidation::QuitCompetingThreads(const CBlock& block)
                 }
                 (*mi).second.fQuit = true; // quit the thread
                 LogPrint("parallel", "interrupting a thread with blockhash %s and previous blockhash %s\n", 
-                          (*mi).second.hash.ToString(), block.GetBlockHeader().hashPrevBlock.ToString());
+                          (*mi).second.hash.ToString(), prevBlockHash.ToString());
             }
             // Clear the scriptqueue before returning so that we can grab it again if we have another block to process
             // using this same thread.

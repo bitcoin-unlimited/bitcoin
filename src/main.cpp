@@ -2728,9 +2728,6 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     if (PV.ChainWorkHasChanged(nStartingChainWork) || PV.QuitReceived(this_id, fParallel)) {
         return false; // no need to lock cs_main before returing as it should already be locked.
     }
-    // We must kill any competing threads here before updating the UTXO.
-    PV.QuitCompetingThreads(block); 
-
 
     CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
     if (block.vtx[0].GetValueOut() > blockReward)
@@ -2742,8 +2739,9 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     if (fJustCheck)
         return true;
 
- 
- 
+    // Quit any competing threads may be validating which have the same previous block before updating the UTXO.
+    PV.QuitCompetingThreads(block.GetBlockHeader().hashPrevBlock); 
+
     //BU: parallel validation - Flush the temporary UTXO view to the base view.
     int64_t nUpdateCoinsTimeBegin = GetTimeMicros();
     LogPrint("parallel", "Updating UTXO for %s\n", block.GetHash().ToString());
