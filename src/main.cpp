@@ -2742,7 +2742,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     // Quit any competing threads may be validating which have the same previous block before updating the UTXO.
     PV.QuitCompetingThreads(block.GetBlockHeader().hashPrevBlock); 
 
-    //BU: parallel validation - Flush the temporary UTXO view to the base view.
+    // Flush the temporary UTXO view to the base view (the in memory UTXO main cache)
     int64_t nUpdateCoinsTimeBegin = GetTimeMicros();
     LogPrint("parallel", "Updating UTXO for %s\n", block.GetHash().ToString());
     viewTempCache.Flush();
@@ -2788,7 +2788,7 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         if (!pblocktree->WriteTxIndex(vPos))
             return AbortNode(state, "Failed to write transaction index");
 
-    // add this block to the view's block chain
+    // add this block to the view's block chain (the main UTXO in memory cache)
     view.SetBestBlock(pindex->GetBlockHash());
 
     int64_t nTime5 = GetTimeMicros(); nTimeIndex += nTime5 - nTime4;
