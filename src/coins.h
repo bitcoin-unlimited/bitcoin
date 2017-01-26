@@ -18,6 +18,8 @@
 
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
+#include <boost/thread/locks.hpp>
+#include <boost/thread/shared_mutex.hpp>
 
 /** 
  * Pruned version of CTransaction: only retains metadata and unspent transaction outputs
@@ -316,6 +318,9 @@ struct CCoinsStats
 class CCoinsView
 {
 public:
+
+    mutable boost::shared_mutex cs_utxo;
+
     //! Retrieve the CCoins (unspent transaction outputs) for a given txid
     virtual bool GetCoins(const uint256 &txid, CCoins &coins) const;
 
