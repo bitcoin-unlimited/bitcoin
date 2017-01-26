@@ -2619,9 +2619,9 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         if (!tx.IsCoinBase())
         {
             if (!viewTempCache.HaveInputs(tx)) {
-                // ** In the event of a big block DDOS attack, by checking the Chain Work here, we ensure that the thread 
-                //    that is validating the block will immediately exit and finish up (while still keeping the block on 
-                //    disk if needed or a reorg) as soon as the first block makes it through and wins the validation race.
+                // If we were validating at the same time as another block and the other block wins the validation race
+                // and updates the UTXO first, then we may end up here with missing inputs.  Therefore we checke to see
+                // if the chainwork has advanced or if we recieved a quit and if so return without DOSing the node.
                 PV.SetLocks(fParallel);
                 if (PV.ChainWorkHasChanged(nStartingChainWork) || PV.QuitReceived(this_id, fParallel)) {
                     return false;
@@ -2712,6 +2712,10 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
         PV.SetLocks(fParallel);
         return state.DoS(100, false);
     }
+    if (PV.QuitReceived(this_id, fParallel)) {
+        PV.SetLocks(fParallel);
+        return false;
+    }
 
 
     /*****************************************************************************************************************
@@ -2719,10 +2723,6 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
      *****************************************************************************************************************/
     // If in PV mode and we win the race then we lock everyone out before updating the UTXO and terminating any
     // competing threads.
-    if (PV.QuitReceived(this_id, fParallel)) {
-        PV.SetLocks(fParallel); // cs_main is re-aquired here before any final checks and updates as well as before killing other threads         
-        return false;
-    }
     if (fParallel) cs_main.lock();
     // Last check for chain work just in case the thread manages to get here before being terminated.
     if (PV.ChainWorkHasChanged(nStartingChainWork) || PV.QuitReceived(this_id, fParallel)) {
