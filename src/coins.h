@@ -12,6 +12,7 @@
 #include "memusage.h"
 #include "serialize.h"
 #include "uint256.h"
+#include "sync.h"
 
 #include <assert.h>
 #include <stdint.h>
@@ -319,7 +320,7 @@ class CCoinsView
 {
 public:
 
-    mutable boost::shared_mutex cs_utxo;
+    mutable CCriticalSection cs_utxo;
 
     //! Retrieve the CCoins (unspent transaction outputs) for a given txid
     virtual bool GetCoins(const uint256 &txid, CCoins &coins) const;
